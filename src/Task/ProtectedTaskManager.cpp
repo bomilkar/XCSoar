@@ -113,7 +113,8 @@ ProtectedTaskManager::IncrementActiveTaskPointArm(int offset)
     break;
   }
 
-  if(nextwp) nextwp->Reset();
+  // forget that we have visited the previous waypoint already
+  if(nextwp && (offset < 0)) nextwp->Reset();
 }
 
 bool 
