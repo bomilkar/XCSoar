@@ -11,6 +11,8 @@
 #include "Units/System.hpp"
 #include "Operation/Operation.hpp"
 #include "LogFile.hpp"
+#include "Geo/Gravity.hpp"
+#include "Math/Angle.hpp"
 
 using std::string_view_literals::operator""sv;
 
@@ -58,6 +60,13 @@ private:
   bool _ideal_polar_valid = false;
   PolarCoefficients _real_polar; 
   bool _real_polar_valid = false;
+  // Acceleration values
+  double prevAccel_x = 0;
+  double prevAccel_y = 0;
+  double prevAccel_z = 0;
+  double prevRot_x = 0;
+  double prevRot_y = 0;
+  double prevRot_z = 0;
 };
 
 constexpr bool
@@ -302,6 +311,41 @@ OpenVarioDevice::POV(NMEAInputLine &line, NMEAInfo &info)
       break;
 
     switch (type) {
+      case 'A': {
+        double y, z;
+        if (line.ReadChecked(y) && line.ReadChecked(z)) {
+          // We get 2 samples per sec from the device, but only use 1 per sec.
+          // Therefore average of 2 subsequent samples.
+          info.acceleration.ProvideGLoad(
+            SpaceDiagonal(
+              (prevAccel_x+value)/2.0,
+              (prevAccel_y+y)/2.0,
+              (prevAccel_z+z)/2.0) / GRAVITY);
+          prevAccel_x = value;
+          prevAccel_y = y;
+          prevAccel_z = z;
+        }
+        break;
+      }
+      case 'G': {
+        double y, z;
+        if (line.ReadChecked(y) && line.ReadChecked(z)) {
+          /************* fill InfoBox **********************/
+          // We get 2 samples per sec from the device, but only use 1 per sec.
+          // Therefore average of 2 subsequent samples.
+          // in units of degrees per sec
+          // left turn is negative, right turn is positive!
+          info.gyroscope.ProvideTurnRates((prevRot_x+value)/-2.0,
+                                     (prevRot_y+y)/-2.0,
+                                     (prevRot_z+z)/-2.0);
+
+          prevRot_x = value;
+          prevRot_y = y;
+          prevRot_z = z;
+          /*************************************************/
+        }
+        break;
+      }
       case 'E': {
         info.ProvideTotalEnergyVario(value);
         break;

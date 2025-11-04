@@ -197,9 +197,15 @@ protected:
     case WaypointRendererSettings::DisplayTextType::FIRST_WORD:
       CopyTruncateString(buffer, buffer_size, way_point.name.c_str());
       TCHAR *tmp;
-      tmp = _tcsstr(buffer, _T(" "));
-      if (tmp != nullptr)
+      tmp = _tcspbrk(buffer, _T(" /-_+"));
+      if (tmp != nullptr) {
+	if ((tmp - buffer) < 4) { // it's a short word like "Am" or "Bad"
+	  tmp = _tcspbrk(tmp+1, _T(" /-_+")); // find the next word
+	  if (tmp != nullptr)
+	    tmp[0] = '\0';
+	} else
         tmp[0] = '\0';
+      }
       break;
 
     case WaypointRendererSettings::DisplayTextType::SHORT_NAME:

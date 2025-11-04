@@ -3,6 +3,7 @@
 
 #include "Glue.hpp"
 #include "net/http/DownloadManager.hpp"
+#include "util/StaticString.hxx"
 #include "system/Path.hpp"
 
 #include <tchar.h>
@@ -17,6 +18,10 @@ EnqueueRepositoryDownload(bool force)
   if (repository_downloaded && !force)
     return;
 
+  const char default_repo[] = "http://xcs.fliegerclub-moosburg.de/share/repository";
+  const char *repository = getenv("REPOSITORY_URI");
+  if ((repository == NULL) || (StringLength(repository) < 5)) repository = default_repo;
+
   repository_downloaded = true;
-  Net::DownloadManager::Enqueue(REPOSITORY_URI, Path(_T("repository")));
+  Net::DownloadManager::Enqueue(repository, Path(_T("repository")));
 }

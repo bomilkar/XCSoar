@@ -123,6 +123,12 @@ UpdateInfoBoxThermalGain(InfoBoxData &data) noexcept
   }
 
   data.SetValueFromAltitude(thermal.gain);
+
+  StaticString<16> duration_buffer;
+  duration_buffer.Format(_T("%u s"),(unsigned int)thermal.duration.count());
+  TCHAR buffer[32];
+  _tcscpy (buffer, duration_buffer);
+  data.SetComment (buffer);
 }
 
 void

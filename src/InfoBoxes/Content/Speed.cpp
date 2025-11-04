@@ -77,6 +77,7 @@ UpdateInfoBoxSpeedIndicated(InfoBoxData &data) noexcept
   }
 
   data.SetValueFromSpeed(basic.indicated_airspeed, false);
+  data.SetCommentFromSpeed(basic.true_airspeed, false);
 }
 
 void
@@ -89,6 +90,7 @@ UpdateInfoBoxSpeed(InfoBoxData &data) noexcept
   }
 
   data.SetValueFromSpeed(basic.true_airspeed, false);
+  data.SetCommentFromSpeed(basic.indicated_airspeed, false);
 }
 
 void
