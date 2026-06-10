@@ -6,22 +6,52 @@
 #include "DataEditor.hpp"
 #include "NMEA/Info.hpp"
 #include "time/FloatDuration.hxx"
+#include "LogFile.hpp"
+#include <chrono>
 
 using namespace std::chrono;
 
 #ifdef ANDROID
+static constexpr auto SAMPLE_TIME_INCR = std::chrono::milliseconds(1000);
 
 void
 DeviceDescriptor::OnAccelerationSensor(double acceleration) noexcept
 {
   const auto e = BeginEdit();
   NMEAInfo &basic = *e;
-  basic.UpdateClock();
-  basic.alive.Update(basic.clock);
 
-  basic.acceleration.ProvideGLoad(acceleration);
+  static int accu_cnt = 0;
+  static double accumulator = 0;
+  static auto next_sample_time = basic.time;
+  static auto previous_time = basic.time;
 
-  e.Commit();
+  const  auto current_time = basic.time;
+  if (!current_time.IsDefined()) return;
+  // catch time wrap
+  if (current_time < previous_time) {
+    previous_time = current_time;
+    return;
+  }
+
+  accumulator += std::abs(acceleration);
+  accu_cnt += 1;
+  // about 124 readings per sec, to 1 value per sec
+  if (current_time >= next_sample_time && accu_cnt > 0) {
+    // we might have skipped several samples?
+    if (current_time > (next_sample_time + 3 * SAMPLE_TIME_INCR))
+      next_sample_time = current_time + SAMPLE_TIME_INCR;
+    else
+      next_sample_time += SAMPLE_TIME_INCR;
+    basic.UpdateClock();
+    basic.alive.Update(basic.clock);
+
+    basic.acceleration.ProvideGLoad(accumulator / (double)accu_cnt);
+    e.Commit();
+    LogFormat("A %2.2f %d",accumulator,accu_cnt);
+    accu_cnt = 0;
+    accumulator = 0;
+    previous_time = current_time;
+  }
 }
 
 void
@@ -35,7 +65,53 @@ void
 DeviceDescriptor::OnRotationSensor([[maybe_unused]] float dtheta_x, [[maybe_unused]] float dtheta_y,
                                    [[maybe_unused]] float dtheta_z) noexcept
 {
-  // TODO
+  const auto e = BeginEdit();
+  NMEAInfo &basic = *e;
+
+  static int accu_cnt = 0;
+  static float accumulator_x = 0;
+  static float accumulator_y = 0;
+  static float accumulator_z = 0;
+  static auto next_sample_time = basic.time;
+  static auto previous_time = basic.time;
+
+  const  auto current_time = basic.time;
+  if (!current_time.IsDefined()) return;
+  // catch time wrap
+  if (current_time < previous_time) {
+    previous_time = current_time;
+    return;
+  }
+
+  // convert dtheta from rad/sec to deg/sec
+  accumulator_x += dtheta_x * -RAD_TO_DEG;
+  accumulator_y += dtheta_y * -RAD_TO_DEG;
+  accumulator_z += dtheta_z * -RAD_TO_DEG;
+  accu_cnt += 1;
+  // about 6 readings per sec, to 1 value per sec
+  if (current_time >= next_sample_time && accu_cnt > 0) {
+    // we might have skipped several samples?
+    if (current_time > (next_sample_time + 3 * SAMPLE_TIME_INCR))
+      next_sample_time = current_time + SAMPLE_TIME_INCR;
+    else
+      next_sample_time += SAMPLE_TIME_INCR;
+    basic.UpdateClock();
+    basic.alive.Update(basic.clock);
+    basic.gyroscope.ProvideAngularRates(
+      Angle::Degrees(accumulator_x / (float)accu_cnt),
+      Angle::Degrees(accumulator_y / (float)accu_cnt),
+      Angle::Degrees(accumulator_z / (float)accu_cnt),
+      false, // is fixed_and_aligned
+      true); // is real
+    e.Commit();
+    LogFormat("R %2.2f %2.2f %2.2f %d",
+       accumulator_x,accumulator_y,accumulator_z,accu_cnt);
+    accu_cnt = 0;
+    accumulator_x = 0;
+    accumulator_y = 0;
+    accumulator_z = 0;
+    previous_time = current_time;
+  }
 }
 
 void
