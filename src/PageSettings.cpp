@@ -2,75 +2,14 @@
 // Copyright The XCSoar Project
 
 #include "PageSettings.hpp"
+#include "PageOverlayTitle.hpp"
 #include "InfoBoxes/InfoBoxSettings.hpp"
 #include "Language/Language.hpp"
-#include "Weather/Rasp/RaspStore.hpp"
 #include "util/StringBuilder.hxx"
+#include "util/UTF8.hpp"
 
 #include <algorithm>
-
-void
-PageLayout::Normalise() noexcept
-{
-  if (main == Main::EDL_MAP) {
-    main = Main::MAP;
-    overlay = Overlay::EDL;
-    if (bottom == Bottom::NOTHING)
-      bottom = Bottom::EDL_CONTROLS;
-  }
-
-  if (unsigned(overlay) >= unsigned(Overlay::MAX))
-    overlay = Overlay::NONE;
-
-  if (IsMapMain()) {
-    if (!UsesWeatherOverlay() &&
-        bottom == Bottom::EDL_CONTROLS)
-      bottom = Bottom::NOTHING;
-  } else {
-    overlay = Overlay::NONE;
-    if (bottom == Bottom::EDL_CONTROLS)
-      bottom = Bottom::NOTHING;
-  }
-
-  if (overlay != Overlay::RASP)
-    rasp_field = -1;
-  else if (rasp_field < 0)
-    rasp_field = 0;
-}
-
-static void
-AppendOverlayTitle(BasicStringBuilder<char> &builder,
-                   const PageLayout &layout,
-                   const RaspStore *rasp)
-{
-  switch (layout.overlay) {
-  case PageLayout::Overlay::NONE:
-    break;
-
-  case PageLayout::Overlay::RASP:
-    builder.Append(", RASP");
-    if (rasp != nullptr &&
-        layout.rasp_field >= 0 &&
-        unsigned(layout.rasp_field) < rasp->GetItemCount()) {
-      const auto &item = rasp->GetItemInfo(layout.rasp_field);
-      const char *label = item.label != nullptr
-        ? gettext(item.label)
-        : item.name;
-      if (label != nullptr && *label != '\0') {
-        builder.Append(' ');
-        builder.Append(label);
-      }
-    }
-    break;
-
-  case PageLayout::Overlay::EDL:
-    builder.Append(", EDL");
-    break;
-
-  case PageLayout::Overlay::MAX:
-    gcc_unreachable();
-  }
-}
+#include <cassert>
 
 const char *
 PageLayout::MakeTitle(const InfoBoxSettings &info_box_settings,
@@ -88,10 +27,10 @@ PageLayout::MakeTitle(const InfoBoxSettings &info_box_settings,
     break;
 
   case PageLayout::Main::FLARM_RADAR:
-    return _("FLARM radar");
+    return _("FLARM Radar");
 
   case PageLayout::Main::THERMAL_ASSISTANT:
-    return _("Thermal assistant");
+    return _("Thermal Assistant");
 
   case PageLayout::Main::HORIZON:
     return _("Horizon");
@@ -99,6 +38,12 @@ PageLayout::MakeTitle(const InfoBoxSettings &info_box_settings,
   case PageLayout::Main::MAX:
     gcc_unreachable();
   }
+
+  assert(!buffer.empty());
+  /* Callers often pass an uninitialized StaticString buffer.  Start
+     with an empty C string so Overflow before the first Append does
+     not return stack garbage to CalcTextSize. */
+  buffer.front() = '\0';
 
   BasicStringBuilder<char> builder{buffer};
 
@@ -114,10 +59,10 @@ PageLayout::MakeTitle(const InfoBoxSettings &info_box_settings,
       else {
         if (concise) {
           builder.Append(' ');
-          builder.Append(_("Auto"));
+          builder.Append(C_("Status", "Auto"));
         } else {
           builder.Append(" (");
-          builder.Append(_("Auto"));
+          builder.Append(C_("Status", "Auto"));
           builder.Append(')');
         }
       }
@@ -139,13 +84,14 @@ PageLayout::MakeTitle(const InfoBoxSettings &info_box_settings,
       builder.Append(", XS");
       break;
 
-    case Bottom::EDL_CONTROLS:
+    case Bottom::WEATHER_CONTROLS:
       break;
 
     case Bottom::MAX:
       gcc_unreachable();
     }
   } catch (BasicStringBuilder<char>::Overflow) {
+    CropIncompleteUTF8(buffer.data());
   }
 
   return buffer.data();

@@ -15,6 +15,10 @@ class PeriodClock;
 enum ModalResult {
   mrOK = 2,
   mrCancel = 3,
+  /** Extra dialog button (e.g. ListPicker download action). */
+  mrExtra = -2,
+  /** Second extra dialog button (e.g. ListPicker "Now" action). */
+  mrExtra2 = -3,
 };
 
 /**

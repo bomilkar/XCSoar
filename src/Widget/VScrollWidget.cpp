@@ -41,16 +41,17 @@ VScrollWidget::CalcVirtualHeight(const PixelRect &rc) const noexcept
   if (reserve_scrollbar) {
     /* Rich-text / prose content: the widget has a fixed content
        height and cannot shrink, so scroll the full extent. */
-    return max_height > height ? max_height : height;
+    return std::max({1u, max_height, height});
   }
 
   /* Flexible form widgets: only scroll when the widget truly
      cannot compress to fit the viewport (min_height > height). */
-  if (max_height <= height)
-    return max_height;
+  const unsigned virtual_height = max_height <= height
+    ? max_height
+    : std::max(widget->GetMinimumSize().height, height);
 
-  const unsigned min_height = widget->GetMinimumSize().height;
-  return std::max(min_height, height);
+  /* Window::Move() requires a non-empty rectangle. */
+  return std::max(1u, virtual_height);
 }
 
 inline void
@@ -94,8 +95,10 @@ VScrollWidget::Initialise(ContainerWindow &parent,
   style.ControlParent();
   style.Hide();
 
-  if (reserve_scrollbar)
-    style.TabStop();
+  /* Do not TabStop the panel itself.  With TabStop, dialog
+     FocusNext/Previous land on the panel and Up/Down scroll it
+     (including past the real content).  Child tab-stops such as
+     RichTextWindow are found via ControlParent instead. */
 
   VScrollPanelListener &listener = *this;
   SetWindow(std::make_unique<VScrollPanel>(parent, look, rc, style,
@@ -140,11 +143,19 @@ VScrollWidget::Show(const PixelRect &rc) noexcept
   UpdateVirtualHeight(rc);
 
   visible = true;
-  widget->Show(GetWindow().GetVirtualRect());
 
   if (reserve_scrollbar) {
-    /* Rich-text content may update its maximum size after the
-       initial Show (e.g. after text layout).  Re-measure. */
+    /* Viewport-sized child: paint uses VScrollPanel::GetOrigin().
+       Avoids Move()/Invalidate of a full virtual-height window on
+       every smooth-scroll tick. */
+    widget->Show(GetWindow().GetPhysicalRect());
+    UpdateVirtualHeight(rc);
+    widget->Move(GetWindow().GetPhysicalRect());
+  } else {
+    widget->Show(GetWindow().GetVirtualRect());
+
+    /* Remeasure after the child has laid out.  Forms may change
+       row sizes during Show(). */
     UpdateVirtualHeight(rc);
     widget->Move(GetWindow().GetVirtualRect());
   }
@@ -179,7 +190,9 @@ VScrollWidget::Move(const PixelRect &rc) noexcept
      and child widget changes size) */
   if (visible) {
     UpdateVirtualHeight(rc);
-    widget->Move(GetWindow().GetVirtualRect());
+    widget->Move(reserve_scrollbar
+                 ? GetWindow().GetPhysicalRect()
+                 : GetWindow().GetVirtualRect());
   }
 }
 
@@ -279,10 +292,19 @@ VScrollWidget::KeyPress(unsigned key_code) noexcept
 void
 VScrollWidget::OnVScrollPanelChange() noexcept
 {
-  if (visible) {
-    UpdateVirtualHeight(GetWindow().GetClientRect());
-    widget->Move(GetWindow().GetVirtualRect());
+  if (!visible)
+    return;
+
+  if (reserve_scrollbar) {
+    /* Origin-only updates already Invalidate() the panel.  Do not
+       Move() the child (Window::Move always invalidates, and the
+       child stays at the physical viewport).  Resize still goes
+       through VScrollWidget::Move. */
+    return;
   }
+
+  UpdateVirtualHeight(GetWindow().GetClientRect());
+  widget->Move(GetWindow().GetVirtualRect());
 }
 
 bool

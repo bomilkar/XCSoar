@@ -3,45 +3,71 @@
 
 #pragma once
 
-#include "PageSettings.hpp"
-#include "Usage.hpp"
-#include "Weather/EDL/TileStore.hpp"
-#include "time/BrokenDateTime.hpp"
-#include "util/StaticString.hxx"
+#include "ControlsModel.hpp"
+#include "Weather/EDL/DownloadGlue.hpp"
 
-#include <array>
-#include <vector>
+namespace WeatherMapOverlay {
 
-class DataFieldEnum;
-
-namespace MapOverlay {
-
-class EdlControlsModel {
-  static constexpr unsigned forecast_choices = EDL::FORECAST_HOURS_PER_DAY;
-
-  std::array<BrokenDateTime, forecast_choices> forecast_times{};
+/**
+ * Weather cursor-bar model backed by #EDL::FieldControls.
+ */
+class EdlControlsModel final : public ControlsModel,
+                               private EDL::DownloadListener
+{
+  EDL::DownloadGlue *edl_listener_glue = nullptr;
 
 public:
   EdlControlsModel() noexcept = default;
+  ~EdlControlsModel() noexcept override;
 
-  bool OnShow(Usage usage, PageLayout::Overlay overlay) noexcept;
+  void OnShow() noexcept override;
+  void OnHide() noexcept override;
 
-  void FillForecastChoices(DataFieldEnum &field) noexcept;
-  void SelectForecast(unsigned index) noexcept;
+  void FormatPrimaryLabel(StaticString<64> &text) const noexcept override;
+  void FormatSecondaryLabel(StaticString<64> &text) const noexcept override;
 
-  void FillLevelChoices(DataFieldEnum &field) const noexcept;
-  void SelectLevel(unsigned isobar) noexcept;
+  [[nodiscard]]
+  bool HasPrimaryData() const noexcept override;
+  [[nodiscard]]
+  bool HasSecondaryData() const noexcept override;
 
-  [[gnu::pure]]
-  bool GetForecastAutoAdvance() const noexcept;
+  [[nodiscard]]
+  bool StepPrimary(int delta) noexcept override;
+  [[nodiscard]]
+  bool StepSecondary(int delta) noexcept override;
 
-  void SetForecastAutoAdvance(bool auto_advance) noexcept;
+  [[nodiscard]]
+  bool GetPrimaryAutoAdvance() const noexcept override;
+  void SetPrimaryAutoAdvance(bool auto_advance) noexcept override;
+  void ApplyPrimaryAutoAdvance() noexcept override;
+  [[nodiscard]]
+  PrimaryLabelAction GetPrimaryLabelAction() const noexcept override;
+  void OpenPrimaryPicker() noexcept override;
+  void EnablePrimaryAutoFromInput() noexcept override;
 
-  [[gnu::pure]]
-  unsigned SelectedCachedDayIndex(const std::vector<EDL::CachedDay> &days) const noexcept;
+  [[nodiscard]]
+  bool SupportsSecondaryAutoAdvance() const noexcept override;
+  [[nodiscard]]
+  bool GetSecondaryAutoAdvance() const noexcept override;
+  void SetSecondaryAutoAdvance(bool auto_advance) noexcept override;
+  void ApplySecondaryAutoAdvance() noexcept override;
 
-  [[gnu::pure]]
-  StaticString<40> FormatCachedDayLabel(const EDL::CachedDay &day) const noexcept;
+  [[nodiscard]]
+  SecondaryLabelAction GetSecondaryLabelAction() const noexcept override;
+
+  void ResumePrimaryAuto() noexcept override;
+  void ResumeSecondaryAuto() noexcept override;
+
+  [[nodiscard]]
+  SecondaryPickerResult OpenSecondaryPicker() noexcept override;
+
+  void RefreshOverlay() noexcept override;
+  void OnGPSUpdate(const MoreData &basic) noexcept override;
+
+  void OnDownloadFinished(const EDL::DownloadNotification &) noexcept override;
+
+private:
+  void UnregisterEdlDownloadListener() noexcept;
 };
 
-} // namespace MapOverlay
+} // namespace WeatherMapOverlay

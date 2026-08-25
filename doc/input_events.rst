@@ -42,13 +42,21 @@ To use a custom file, go to
 **Menu > Config > System > Look > Language, Input > Events**, select
 your ``.xci`` file, and restart XCSoar.
 
+Custom files are loaded **on top of** the built-in defaults: key and
+menu entries with the same mode and ``location`` (or key) overwrite the
+stock ones; everything else remains.  To replace the built-in map
+entirely instead of merging, put ``#CLEAR`` alone on the **first line**
+of the file (before any other records or comments).  That resets the
+in-memory defaults, then applies only the contents of your ``.xci``.
+
 Default key bindings
 ~~~~~~~~~~~~~~~~~~~~
 
 The built-in ``type=key`` mapping in :file:`Data/Input/default.xci`
 currently uses this grouped layout for ``F1`` -- ``F12``:
 
-- **F1**: quick menu.
+- **F1**: quick menu.  On the FLARM traffic radar, ``F1`` is
+  ``Traffic label toggle`` (AVG/ALT side labels) instead.
 - **F2 / F3** (on the main map, ``mode=default`` only): ``Checklist`` and
   ``FlarmTraffic``.  **F2 / F3** are zoom in / out in ``pan`` mode, on
   the FLARM traffic radar, and in waypoint image ``wptimg``; they do not
@@ -140,9 +148,28 @@ In ``mode=default``, the number row currently uses this grouping:
 File format
 -----------
 
-A ``.xci`` file is plain text with CRLF line endings. Each record is
-a group of ``key=value`` lines separated from the next record by a
-blank line::
+A ``.xci`` file is plain text (Unix LF or Windows CRLF line endings).
+Each record is a group of ``key=value`` lines separated from the next
+record by a blank line.  Lines whose first character is ``#`` are
+comments (except ``#CLEAR`` on line 1; see above).  Leading spaces
+before ``#`` are not stripped, so indented ``#`` lines are not
+treated as comments.
+
+Recognised fields per record:
+
+- ``mode`` -- one or more mode names, separated by spaces
+- ``type`` -- ``key``, ``gce``, ``gesture``, ``ne``, or ``label``
+- ``data`` -- meaning depends on ``type`` (key name, GCE name,
+  gesture path, or NMEA-event name)
+- ``event`` -- action name plus optional argument (may appear more
+  than once; see execution order below)
+- ``label`` -- on-screen button text (optional; supports ``\n``,
+  ``\r``, and ``\\`` escapes)
+- ``location`` -- softkey slot number; only values **greater than
+  zero** create a menu button.  Omit or use ``0`` for a binding with
+  no softkey (keys, gestures, GCEs, etc.).
+
+Example::
 
  mode=default
  type=key
@@ -210,6 +237,11 @@ Event list
    - Controls the airspace display filter mode. Possible arguments:
      ``all`` (show all), ``clip`` (clip to altitude), ``auto``
      (automatic), ``below`` (show all below), ``off`` (hide all).
+ * - ``AirspaceLabels``
+   - Toggles airspace altitude labels on the map (same setting as
+     Configuration → Airspace → Labels). Possible arguments:
+     ``toggle``, ``on`` / ``all``, ``off`` / ``none``, ``show``
+     (display current state).
  * - ``AirspaceWarnings``
    - Opens the airspace warnings dialog.
  * - ``Analysis``
@@ -333,7 +365,8 @@ Event list
      Use ``reset`` to erase all user markers.
  * - ``Mode M``
    - Sets the current input event mode. The argument is the label
-     of the mode to activate (e.g. ``default``, ``Menu``).
+     of the mode to activate (e.g. ``default``, ``Menu``, ``mc``,
+     ``weather``).
  * - ``NearestAirspaceDetails``
    - If airspace warnings are active, opens the airspace warnings
      dialog. Otherwise, finds the nearest airspace (within 30
@@ -456,6 +489,22 @@ Event list
  * - ``UserDisplayModeForce M``
    - Forces a display mode. Possible arguments: ``unforce``,
      ``forceclimb``, ``forcecruise``, ``forcefinal``.
+ * - ``VarioAudioMode``
+   - Controls whether the internal audio vario uses Vario or STF
+     tones. Possible arguments: ``auto`` (switch automatically
+     between Vario in circling and STF in cruise), ``manual`` (keep
+     the current runtime manual mode; after a restart, manual mode
+     starts in Vario), ``vario`` (manual Vario), ``stf``
+     (manual speed-to-fly), ``toggle`` (toggle manual Vario/STF),
+     ``show`` (display the current mode). STF audio needs valid
+     airspeed and total-energy vario input; in the built-in simulator,
+     manual STF stays silent and auto cruise falls back to vario unless
+     such input is provided.
+ * - ``VarioVolume``
+   - Adjusts the internal audio vario volume. Possible arguments:
+     ``mute`` (toggle mute and restore the previous level when hit
+     again), ``up`` / ``+`` (increase and unmute), ``down`` / ``-``
+     (decrease and unmute), ``show`` (display current value).
  * - ``WaypointDetails W``
    - Displays airfield/waypoint details.
 
@@ -477,6 +526,35 @@ Event list
    - Opens the waypoint editor/configuration dialog.
  * - ``Weather``
    - Opens the weather dialog.
+ * - ``WeatherOverlay``
+   - Adjusts the active map weather overlay cursor bar (EDL, RASP, XC Therm,
+     or SkySight). Only has an effect on map pages that show weather overlay
+     controls. Arguments use a common ``<axis> …`` prefix:
+
+     **Time:** ``time +``, ``time -`` (step forecast time), ``time picker``
+     (open the time picker with Auto, Now, and manual selection)
+
+     **Time auto/manual:** ``time auto toggle``, ``time auto on``,
+     ``time auto off``, ``time auto show``
+
+     **Secondary axis:** ``field +``, ``field -`` (step layer, pressure
+     level, or altitude band). ``altitude +/-`` and EDL ``level +/-`` are
+     accepted as aliases.
+
+     **Secondary list:** ``field picker``, ``layer picker``, or
+     ``level picker`` (open the ComboPicker list for the active overlay).
+
+     **Setup:** ``setup`` opens the Info → Weather dialog on the tab that
+     matches the active overlay (RASP, EDL, or XC Therm).
+
+     **Secondary auto/manual:** ``field auto toggle`` (and ``altitude auto
+     …``, ``level auto …`` aliases). On RASP, secondary auto falls back
+     to time auto when no secondary axis exists.
+
+     RASP overlays support time and layer selection. EDL overlays support
+     time and pressure level. XC Therm overlays map the secondary axis to
+     altitude bands and time to forecast hours. SkySight uses the secondary
+     axis for selected layers and the time axis for available forecast steps.
  * - ``Zoom Z``
    - Controls map zoom. Possible arguments: ``auto toggle``,
      ``auto on``, ``auto off``, ``auto show``, ``in``, ``out``,
@@ -503,6 +581,22 @@ Built-in modes
 - ``infobox`` -- an InfoBox has been selected.
 - ``pan`` -- pan mode is active.
 - ``Menu`` -- a menu level is open.
+- ``RemoteStick`` -- contents of the **Quick Menu** (lightning / bolt
+  button, default ``F1``, or the ``ULDR`` gesture).  Softkeys with
+  ``mode=RemoteStick`` and a ``location`` appear in that grid.  Edit
+  those records in a custom ``.xci`` to reorder or limit Quick Menu
+  entries.
+- ``mc`` -- MacCready adjustment mode. Entered from ``mode=default`` via
+  the ``Mode mc`` event (default key ``3``). Stick UP/DOWN adjust MC;
+  RETURN toggles auto/manual MC; ESCAPE returns to ``default``.
+- ``weather`` -- weather overlay cursor bar mode. Enter from the quick
+  menu (**Forecast Controls** on RemoteStick) or via the ``Mode weather``
+  event. Stick UP/DOWN step the secondary axis (layer, level, or
+  altitude), LEFT/RIGHT step time, RETURN opens the time picker, ESCAPE
+  returns to ``default``. In ``mode=weather``, F2 opens the secondary
+  list and F3 toggles auto (secondary axis on EDL/XC Therm, time auto on
+  RASP). The map overlay **+** / **−** buttons always zoom the map.
+  See :ref:`weather-overlay-mode` below.
 - ``wptimg`` -- the waypoint details dialog is on an **image** page;
   key bindings in this map control zoom and pan of the image (the
   ``WaypointImage`` event) without inheriting the normal ``default``
@@ -511,13 +605,97 @@ Built-in modes
 You may define any additional mode names to build custom menu
 hierarchies.
 
+.. _weather-overlay-mode:
+
+Weather overlay mode (``mode=weather``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When a map page displays EDL, RASP, XC Therm, or SkySight overlay controls in the
+bottom cursor bar, open the quick menu (F1 or the ULDR gesture) and choose
+**Forecast Controls** (RemoteStick), or bind ``Mode weather`` elsewhere,
+to enter ``mode=weather`` so stick and button bindings can adjust forecast
+time and the secondary axis without leaving the map. Pressing ESCAPE
+returns to ``default``.
+
+The built-in stick bindings in :file:`Data/Input/default.xci` are:
+
+.. list-table::
+ :widths: 20 50 30
+ :header-rows: 1
+
+ * - Input
+   - Event
+   - Action
+ * - UP / DOWN
+   - ``WeatherOverlay field +/-``
+   - Step layer (RASP), pressure level (EDL), or altitude band (XC Therm)
+ * - LEFT / RIGHT
+   - ``WeatherOverlay time -/+``
+   - Step forecast time
+ * - RETURN
+   - ``WeatherOverlay time picker``
+   - Open time picker (Auto, Now, manual)
+ * - F2
+   - ``WeatherOverlay field picker``
+   - Open secondary-axis list (layer, level, or altitude)
+ * - F3
+   - ``WeatherOverlay field auto toggle``
+   - Toggle secondary auto (EDL/XC Therm) or time auto (RASP)
+ * - ESCAPE
+   - ``Mode default``
+   - Exit weather input mode
+
+The map overlay **+** / **−** buttons always zoom the map (they are not
+remapped in weather mode). On-screen menubar buttons (locations 1--8)
+mirror the stick actions:
+
+.. list-table::
+ :widths: 15 35 50
+ :header-rows: 1
+
+ * - Location
+   - Action
+   - Label (overlay-specific)
+ * - 1
+   - Time step back
+   - ``Time- (LEFT)``
+ * - 2
+   - Secondary list
+   - Layer / Level / Altitude list (``F2``)
+ * - 3
+   - Auto toggle
+   - Time auto (RASP) or secondary auto (EDL/XC Therm) (``F3``)
+ * - 4
+   - Time step forward
+   - ``Time+ (RIGHT)``
+ * - 5
+   - Secondary step up
+   - ``Field+ / Level+ / Altitude+ (UP)``
+ * - 6
+   - Secondary step down
+   - ``Field- / Level- / Altitude- (DOWN)``
+ * - 7
+   - Time picker
+   - ``Time Picker (RETURN)``
+ * - 8
+   - Weather Setup
+   - Opens Info → Weather for the active overlay
+
+Tapping the secondary cursor-bar label also opens the list picker, which
+includes a **Setup** button that opens Info → Weather for the active
+overlay. The map title shows the active overlay layer when applicable.
+
+The same ``WeatherOverlay`` arguments can be bound in any mode (for
+example from ``mode=default``) if you prefer not to use ``mode=weather``.
+
 Labels
 ~~~~~~
 
 Each record can include a ``label`` and ``location`` to display an
-on-screen button. Labels are passed through ``gettext`` for
-translation. The number of label slots and their layout depend on the
-device's screen size.
+on-screen button.  ``location`` must be greater than zero; the layout
+and number of slots depend on the device.  Labels are passed through
+``gettext`` for translation.  Use ``\n`` for a line break in the
+button text (also ``\r`` and ``\\``).
 
 Keys
 ----
@@ -548,31 +726,64 @@ Windows:
 Input types
 ~~~~~~~~~~~
 
-- ``key`` -- a hardware or keyboard key press.
+- ``key`` -- a hardware or keyboard key press (``data`` = key name).
 - ``gce`` -- a Glide Computer Event (see below).
-- ``nmea`` -- a sentence received on an NMEA port.
+- ``gesture`` -- a touch-screen stroke.  ``data`` is a sequence of the
+  letters ``U``, ``D``, ``L``, and ``R`` only (up / down / left /
+  right), e.g. ``ULDR`` for the default Quick Menu gesture.  A custom
+  file entry with the same ``data`` replaces the built-in binding.
+- ``ne`` -- an NMEA / hardware digital-input event (see below).
+- ``label`` -- softkey only: uses ``label`` and ``location`` with no
+  key, gesture, or GCE binding.
 
 Glide Computer Events
 ---------------------
 
 Glide Computer Events (GCEs) are triggered automatically by the glide
 computer rather than by user input. They are defined with
-``type=gce`` and the event name in the ``data`` field. You can attach
-the same actions to a GCE as to any other input -- for example, play
-a sound, display a message, or change the zoom level when entering a
-thermal.
+``type=gce`` and the event name in the ``data`` field (without a
+``GCE_`` prefix). You can attach the same actions to a GCE as to any
+other input -- for example, play a sound, display a message, or
+change the zoom level when entering a thermal.
+
+``AIRSPACE_NEAR``
+   Approaching an airspace for which warnings are enabled.
+
+``AIRSPACE_ENTER``
+   Entered an airspace for which warnings are enabled.
+
+``AIRSPACE_LEAVE``
+   Left an airspace for which warnings are enabled.
 
 ``COMMPORT_RESTART``
    The comm port has been restarted.
 
+``FLARM_NOTRAFFIC``
+   FLARM reports no traffic.
+
+``FLARM_TRAFFIC``
+   FLARM traffic is present.
+
+``FLARM_NEWTRAFFIC``
+   A new FLARM traffic target appeared.
+
 ``FLIGHTMODE_CLIMB``
-   The flight mode has switched to "climb".
+   Flight mode switched to climb.
 
 ``FLIGHTMODE_CRUISE``
-   The flight mode has switched to "cruise".
+   Flight mode switched to cruise.
 
 ``FLIGHTMODE_FINALGLIDE``
-   The flight mode has switched to "final glide".
+   Flight mode switched to final glide.
+
+``FLIGHTMODE_FINALGLIDE_TERRAIN``
+   Final glide path intersects terrain.
+
+``FLIGHTMODE_FINALGLIDE_ABOVE``
+   Above final glide.
+
+``FLIGHTMODE_FINALGLIDE_BELOW``
+   Below final glide.
 
 ``GPS_CONNECTION_WAIT``
    Waiting for the GPS connection.
@@ -595,10 +806,40 @@ thermal.
 ``TAKEOFF``
    Takeoff detected.
 
-``AIRSPACE_NEAR``
-   The aircraft has approached an airspace for which warnings are
-   enabled.
+``TASK_NEXTWAYPOINT``
+   Advanced to the next task waypoint.
 
-``AIRSPACE_ENTER``
-   The aircraft has entered an airspace for which warnings are
-   enabled.
+``TASK_START``
+   Task start detected.
+
+``TASK_FINISH``
+   Task finish detected.
+
+``TEAM_POS_REACHED``
+   Team-code position reached.
+
+``ARM_READY``
+   Arm-advance ready.
+
+``POLAR_CHANGED``
+   Glide polar changed.
+
+``ALTERNATE_CHANGED``
+   Selected alternate changed.
+
+``LANDABLE_UNREACHABLE``
+   A landable waypoint became unreachable.
+
+NMEA / hardware events
+----------------------
+
+Records with ``type=ne`` bind actions to digital-input events from
+certain instruments (historically Vega flap/gear/airbrake and related
+switches).  Put the event name in ``data`` **without** the ``NE_``
+prefix (for example ``DOWN_IN_GEAR_EXTENDED``).
+
+Names follow ``DOWN_IN_…`` / ``UP_IN_…`` (input asserted / released)
+and ``DOWN_OUT_…`` / ``UP_OUT_…`` (output / advisory).  The full set
+is defined in :file:`src/Input/InputQueue.hpp` (the ``NE_*``
+enumeration).  Unused slots are named ``UNUSED_n`` and should not be
+used in new files.

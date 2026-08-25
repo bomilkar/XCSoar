@@ -6,8 +6,7 @@
 #include "Renderer/SymbolButtonRenderer.hpp"
 #include "Look/ButtonLook.hpp"
 #include "Input/InputEvents.hpp"
-#include "Interface.hpp"
-#include "UIState.hpp"
+#include "PageActions.hpp"
 
 #include <memory>
 
@@ -21,7 +20,8 @@
 #endif
 
 /**
- * Map overlay buttons (menu, zoom) are hidden on special pages.
+ * Map overlay buttons (menu, QuickMenu, zoom) are hidden on special
+ * pages; see PageActions::AllowMapOverlayButtons().
  */
 class ShowMapOverlayButtonRenderer : public ButtonRenderer {
   std::unique_ptr<ButtonRenderer> inner;
@@ -36,7 +36,7 @@ public:
 
   void DrawButton(Canvas &canvas, const PixelRect &rc,
                   ButtonState state) const noexcept override {
-    if (CommonInterface::GetUIState().pages.special_page.IsDefined())
+    if (!PageActions::AllowMapOverlayButtons())
       return;
 
     inner->DrawButton(canvas, rc, state);
@@ -62,6 +62,21 @@ bool
 ShowMenuButton::OnClicked() noexcept
 {
   InputEvents::ShowMenu();
+  return true;
+}
+
+void
+ShowQuickMenuButton::Create(ContainerWindow &parent, const ButtonLook &look,
+                            const PixelRect &rc,
+                            WindowStyle style) noexcept
+{
+  Button::Create(parent, rc, style, MakeMapOverlaySymbolButton(look, "q"));
+}
+
+bool
+ShowQuickMenuButton::OnClicked() noexcept
+{
+  InputEvents::eventQuickMenu(nullptr);
   return true;
 }
 

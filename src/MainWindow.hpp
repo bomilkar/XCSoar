@@ -47,6 +47,7 @@ class MainWindow : public UI::SingleWindow {
   MenuBar *menu_bar = nullptr;
 
   ShowMenuButton *show_menu_button = nullptr;
+  ShowQuickMenuButton *show_quickmenu_button = nullptr;
   ShowZoomButton *show_zoom_out_button = nullptr;
   ShowZoomButton *show_zoom_in_button = nullptr;
 
@@ -138,6 +139,23 @@ private:
   PixelRect map_rect;
   bool FullScreen = false;
 
+  /**
+   * Nesting count for #BeginCoalesceMapLayout() /
+   * #EndCoalesceMapLayout().  While non-zero, #LayoutMapArea() only
+   * sets #map_layout_pending.
+   */
+  unsigned coalesce_map_layout = 0;
+
+  /** A #LayoutMapArea() was requested while coalescing was active. */
+  bool map_layout_pending = false;
+
+  /**
+   * True when #BeginCoalesceMapLayout() also started map full-redraw
+   * coalescing.  End must use this rather than re-testing #map, which
+   * may appear or disappear between the pair of calls.
+   */
+  bool coalesce_map_redraw = false;
+
 #ifndef ENABLE_OPENGL
   /**
    * This variable tracks whether the #DrawThread was suspended
@@ -205,6 +223,9 @@ protected:
   void KillBottomWidget() noexcept;
 
 public:
+  Widget *GetBottomWidget() const noexcept {
+    return bottom_widget;
+  }
   void Create(PixelSize size, UI::TopWindowStyle style={});
 
   void Destroy() noexcept;
@@ -282,6 +303,12 @@ private:
 
 public:
   /**
+   * Create or destroy map overlay buttons to match the current
+   * UISettings, then update their positions.
+   */
+  void ReinitialiseMapOverlayButtons() noexcept;
+
+  /**
    * Called by XCSoarInterface::Startup() after startup has been
    * completed.
    */
@@ -337,6 +364,13 @@ public:
   }
 
   void SetFullScreen(bool _full_screen) noexcept;
+
+  /**
+   * Coalesce map area layout (and map #FullRedraw) while a page layout
+   * is applied in several steps (InfoBoxes, bottom widget, …).
+   */
+  void BeginCoalesceMapLayout() noexcept;
+  void EndCoalesceMapLayout() noexcept;
 
   void SendGPSUpdate(bool vario_bar_redraw=false) noexcept;
 
@@ -507,6 +541,7 @@ protected:
   bool OnKeyDown(unsigned key_code) noexcept override;
   void OnPaint(Canvas &canvas) noexcept override;
   PixelRect GetShowMenuButtonRect(const PixelRect rc) noexcept;
+  PixelRect GetShowQuickMenuButtonRect(const PixelRect rc) noexcept;
   PixelRect GetShowZoomButtonRect(const PixelRect rc,
                                   ShowZoomButton::Sign sign) noexcept;
 

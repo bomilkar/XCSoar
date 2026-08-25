@@ -6,8 +6,10 @@
 #include "Apple/InternalSensors.hpp"
 #include "Device/SensorListener.hpp"
 #include "Geo/GeoPoint.hpp"
+#include "Language/Language.hpp"
 #include "time/FloatDuration.hxx"
 #include "time/SystemClock.hxx"
+#include "LogFile.hpp"
 
 #include <TargetConditionals.h>
 
@@ -108,7 +110,13 @@
 - (void)locationManager:(CLLocationManager *)manager
     didFailWithError:(NSError *)error
 {
+  LogFmt("CoreLocation failed: domain={} code={} description={}",
+         [[error domain] UTF8String], [error code],
+         [[error localizedDescription] UTF8String]);
   self->listener->OnConnected(0);
+
+  if ([error code] == kCLErrorDenied)
+    self->listener->OnSensorError(_("Location access denied"));
 }
 
 #if TARGET_OS_IPHONE
@@ -338,6 +346,13 @@ void InternalSensors::Deinit()
  */
 void InternalSensors::StartAltimeterUpdates()
 {
+  /* Core Motion does not publish the pressure sensor's noise
+     characteristics.  Use the same conservative fallback variance as
+     Android's unidentified pressure sensors.  Passing zero here makes the
+     Kalman filter treat every pressure sample as exact, which turns normal
+     sensor noise into large vario excursions. */
+  static constexpr float PRESSURE_SENSOR_NOISE_VARIANCE = 0.05f;
+
   // Initialize altimeter for pressure readings
   altimeter = [[CMAltimeter alloc] init];
   NSOperationQueue *queue = [[NSOperationQueue alloc] init];
@@ -353,7 +368,7 @@ void InternalSensors::StartAltimeterUpdates()
     // Convert pressure readings (from kPa to hPa/mbar) and notify listener
     listener.OnBarometricPressureSensor(
       static_cast<float>(altitudeData.pressure.floatValue * 10.0f),
-      0.0f
+      PRESSURE_SENSOR_NOISE_VARIANCE
     );
   }];
 }

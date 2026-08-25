@@ -34,13 +34,38 @@ MapWindow::~MapWindow() noexcept
   delete topography_renderer;
 }
 
+#ifndef ENABLE_OPENGL
+
+void
+MapWindow::PublishFrameProjection() noexcept
+{
+  const std::lock_guard lock{frame_projection_mutex};
+  published_projection = visible_projection;
+}
+
+#endif
+
 #ifdef ENABLE_OPENGL
 
 void
 MapWindow::SetOverlay(std::unique_ptr<MapOverlay> &&_overlay) noexcept
 {
+#if defined(HAVE_HTTP)
+  SetOverlay(0, std::move(_overlay));
+#else
   overlay = std::move(_overlay);
+#endif
 }
+
+#if defined(HAVE_HTTP)
+void
+MapWindow::SetOverlay(unsigned index, std::unique_ptr<MapOverlay> &&_overlay) noexcept
+{
+  assert(index < MapWindowOverlay::MAX_MAP_OVERLAYS);
+  if (index < MapWindowOverlay::MAX_MAP_OVERLAYS)
+    overlay[index] = std::move(_overlay);
+}
+#endif
 
 #endif
 

@@ -74,6 +74,12 @@ private:
    */
   std::function<void(bool)> gesture_callback;
 
+  /**
+   * Optional callback after an internal (xcsoar://) link dialog
+   * closes, forwarded to the internal RichTextWidget.
+   */
+  std::function<void()> link_return_callback;
+
 public:
   explicit QuickGuidePageWidget(const DialogLook &_look,
                                 const char *_markdown_text) noexcept;
@@ -95,6 +101,29 @@ public:
    * after #Initialise().
    */
   void SetGestureCallback(std::function<void(bool)> cb) noexcept;
+
+  /**
+   * Set a callback invoked after an internal (xcsoar://) link dialog
+   * closes.  Must be called before Initialise().
+   */
+  void SetLinkReturnCallback(std::function<void()> cb) noexcept;
+
+  /**
+   * Move keyboard focus onto the bottom bar.
+   * @param from_end  If true, prefer the control nearest Close
+   *                  (right button); otherwise the first control.
+   */
+  bool FocusBottomBar(bool from_end=false) noexcept;
+
+  /**
+   * True when the checkbox or a bottom-bar button has focus (not the
+   * scrollable content).  ArrowPager uses this so Down from the bar
+   * enters the prev/next/Close chrome without stealing Down from
+   * ordinary form pages (e.g. Configuration panels).
+   */
+  [[gnu::pure]]
+  bool IsBottomBarFocused() const noexcept;
+
   ~QuickGuidePageWidget() noexcept override;
 
   /**

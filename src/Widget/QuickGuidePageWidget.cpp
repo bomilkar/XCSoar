@@ -29,6 +29,12 @@ QuickGuidePageWidget::SetGestureCallback(std::function<void(bool)> cb) noexcept
       gesture_callback);
 }
 
+void
+QuickGuidePageWidget::SetLinkReturnCallback(std::function<void()> cb) noexcept
+{
+  link_return_callback = std::move(cb);
+}
+
 std::unique_ptr<QuickGuidePageWidget>
 QuickGuidePageWidget::CreateContentPage(
   const DialogLook &look,
@@ -108,8 +114,12 @@ void
 QuickGuidePageWidget::SetText(const char *text) noexcept
 {
   markdown_text = text ? text : "";
-  // If the scroll widget already has a RichTextWidget inside,
-  // we can't easily update it. The caller should recreate the page.
+  if (scroll_widget == nullptr)
+    return;
+
+  auto &rich_text = static_cast<RichTextWidget &>(
+    static_cast<VScrollWidget &>(*scroll_widget).GetWidget());
+  rich_text.SetText(markdown_text.c_str());
 }
 
 QuickGuidePageWidget::PageLayout
@@ -156,6 +166,8 @@ QuickGuidePageWidget::Initialise(ContainerWindow &parent,
   // Create the RichTextWidget wrapped in VScrollWidget
   auto rich_text = std::make_unique<RichTextWidget>(
     look, markdown_text.c_str(), parse_links);
+  if (link_return_callback)
+    rich_text->SetLinkReturnCallback(link_return_callback);
   auto scroll = std::make_unique<VScrollWidget>(
     std::move(rich_text), look, true);
 
@@ -319,59 +331,98 @@ QuickGuidePageWidget::HasFocus() const noexcept
 }
 
 bool
-QuickGuidePageWidget::KeyPress(unsigned key_code) noexcept
+QuickGuidePageWidget::FocusBottomBar(bool from_end) noexcept
 {
-  // Let the scroll content handle the key first
-  if (scroll_widget->KeyPress(key_code))
+  switch (bar_type) {
+  case BottomBarType::NONE:
+    return false;
+
+  case BottomBarType::CHECKBOX:
+    if (checkbox == nullptr)
+      return false;
+    checkbox->SetFocus();
     return true;
 
-  // Handle DOWN to move focus from content to bottom bar
-  if (key_code == KEY_DOWN && bar_type != BottomBarType::NONE) {
-    switch (bar_type) {
-    case BottomBarType::NONE:
-      break;
-    case BottomBarType::CHECKBOX:
-      if (checkbox) {
-        checkbox->SetFocus();
-        return true;
-      }
-      break;
-    case BottomBarType::ONE_BUTTON:
-      if (button1) {
-        button1->SetFocus();
-        return true;
-      }
-      break;
-    case BottomBarType::TWO_BUTTONS:
-      if (button1) {
-        button1->SetFocus();
-        return true;
-      }
-      break;
-    }
-  }
+  case BottomBarType::ONE_BUTTON:
+    if (button1 == nullptr)
+      return false;
+    button1->SetFocus();
+    return true;
 
-  // Handle UP to move focus from bottom bar back to content
-  if (key_code == KEY_UP) {
-    bool bottom_has_focus =
-      (checkbox && checkbox->HasFocus()) ||
-      (button1 && button1->HasFocus()) ||
-      (button2 && button2->HasFocus());
-    if (bottom_has_focus) {
-      scroll_widget->SetFocus();
-      return true;
-    }
-  }
-
-  // Handle LEFT/RIGHT between buttons in two-button mode
-  if (bar_type == BottomBarType::TWO_BUTTONS) {
-    if (key_code == KEY_RIGHT && button1 &&
-        button1->HasFocus() && button2) {
+  case BottomBarType::TWO_BUTTONS:
+    if (from_end && button2 != nullptr) {
       button2->SetFocus();
       return true;
     }
-    if (key_code == KEY_LEFT && button2 &&
-        button2->HasFocus() && button1) {
+    if (button1 != nullptr) {
+      button1->SetFocus();
+      return true;
+    }
+    return false;
+  }
+
+  return false;
+}
+
+bool
+QuickGuidePageWidget::IsBottomBarFocused() const noexcept
+{
+  if (checkbox != nullptr && checkbox->HasFocus())
+    return true;
+  if (button1 != nullptr && button1->HasFocus())
+    return true;
+  if (button2 != nullptr && button2->HasFocus())
+    return true;
+  return false;
+}
+
+bool
+QuickGuidePageWidget::KeyPress(unsigned key_code) noexcept
+{
+  if (scroll_widget->HasFocus()) {
+    if (scroll_widget->KeyPress(key_code))
+      return true;
+    /* Content done with Down → bottom bar (don't show again, …). */
+    if (key_code == KEY_DOWN)
+      return FocusBottomBar(false);
+    return false;
+  }
+
+  const bool on_checkbox = checkbox && checkbox->HasFocus();
+  const bool on_button1 = button1 && button1->HasFocus();
+  const bool on_button2 = button2 && button2->HasFocus();
+
+  if (key_code == KEY_DOWN) {
+    if (on_button1 && button2 != nullptr) {
+      button2->SetFocus();
+      return true;
+    }
+    /* Checkbox / last button: let the dialog move to Close. */
+    if (on_checkbox || on_button1 || on_button2)
+      return false;
+  }
+
+  if (key_code == KEY_UP) {
+    if (on_button2 && button1 != nullptr) {
+      button1->SetFocus();
+      return true;
+    }
+    if (on_checkbox || on_button1 || on_button2) {
+      /* Return focus to the content and select the last visible
+         link/checkbox — SetFocus alone left the scroller focused
+         with nothing highlighted. */
+      scroll_widget->SetFocus();
+      scroll_widget->KeyPress(KEY_UP);
+      return true;
+    }
+  }
+
+  if (bar_type == BottomBarType::TWO_BUTTONS) {
+    if (key_code == KEY_RIGHT && on_button1 && button2) {
+      button2->SetFocus();
+      return true;
+    }
+    if (key_code == KEY_LEFT && on_button2 && button1) {
       button1->SetFocus();
       return true;
     }

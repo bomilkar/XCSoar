@@ -345,8 +345,8 @@ libpng = LibPngProject(
 )
 
 libjpeg = CmakeProject(
-    "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.4/libjpeg-turbo-3.1.4.tar.gz",
-    "e23d3ebb2c6ee4d0e2a5823dbb55b614845df5ea3435c956fed5cf04041a87ad",
+    "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.2.0/libjpeg-turbo-3.2.0.tar.gz",
+    "6f30092cef9fb839779646608f4ee14ae3cbac989c47fa05e841b0841f09878e",
     "lib/libjpeg.a",
     [
         "-DENABLE_STATIC=ON",
@@ -438,6 +438,32 @@ libgeotiff = CmakeProject(
         "-DBUILD_SHARED_LIBS=OFF",
     ],
     patches=abspath("lib/libgeotiff/patches"),
+)
+
+netcdf = CmakeProject(
+    "https://github.com/Unidata/netcdf-c/archive/refs/tags/v4.10.0.tar.gz",
+    "ce160f9c1483b32d1ba8b7633d7984510259e4e439c48a218b95a023dc02fd4c",
+    "lib/pkgconfig/netcdf.pc",
+    [
+        "-DBUILD_SHARED_LIBS=OFF",
+        "-DNETCDF_ENABLE_HDF5=OFF",
+        "-DNETCDF_ENABLE_DAP=OFF",
+        "-DNETCDF_ENABLE_NCZARR=OFF",
+        "-DNETCDF_ENABLE_REMOTE_FUNCTIONALITY=OFF",
+        "-DNETCDF_ENABLE_BYTERANGE=OFF",
+        "-DNETCDF_BUILD_UTILITIES=OFF",
+        "-DNETCDF_ENABLE_TESTS=OFF",
+        "-DNETCDF_ENABLE_EXAMPLES=OFF",
+        "-DNETCDF_ENABLE_LIBXML2=OFF",
+        "-DNETCDF_ENABLE_PLUGINS=OFF",
+    ],
+    android_configure_args=[
+        "-DHAVE_LIBM=m",
+        "-DZLIB_LIBRARY=z",
+        "-DNETCDF_ENABLE_MMAP=OFF",
+    ],
+    base="netcdf-c-4.10.0",
+    patches=abspath("lib/netcdf/patches"),
 )
 
 sdl2 = CmakeProject(

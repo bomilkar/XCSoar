@@ -10,6 +10,7 @@
 #include "Renderer/WaypointRendererSettings.hpp"
 #include "Engine/Task/Shapes/FAITriangleSettings.hpp"
 #include "Terrain/TerrainSettings.hpp"
+#include "Weather/Rasp/ContourDensity.hpp"
 
 #include <type_traits>
 
@@ -49,7 +50,7 @@ enum class FinalGlideBarDisplayMode: uint8_t {
   AUTO,
 };
 
-enum class DisplaySkyLinesTrafficMapMode: uint8_t {
+enum class DisplayOnlineTrafficMapMode: uint8_t {
   OFF,
   SYMBOL,
   SYMBOL_NAME,
@@ -182,9 +183,9 @@ struct MapSettings {
   bool show_fai_triangle_areas;
 
   /**
-   * Display skylines name on map
+   * Display online traffic (SkyLines and XCSoar Cloud) on the map.
    */
-  DisplaySkyLinesTrafficMapMode skylines_traffic_map_mode;
+  DisplayOnlineTrafficMapMode online_traffic_map_mode;
 
   FAITriangleSettings fai_triangle_settings;
 
@@ -193,6 +194,12 @@ struct MapSettings {
 
   /** Show 95% distance rule helpers on map and infoboxes */
   bool show_95_percent_rule_helpers;
+
+  /** RASP weather overlay opacity (0=transparent, 100=opaque) */
+  uint8_t rasp_layer_opacity;
+
+  /** Density of contour lines drawn on the RASP weather overlay */
+  ContourDensity rasp_contour_density;
 
   void SetDefaults() noexcept;
 };

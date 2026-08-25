@@ -3,7 +3,8 @@
 
 #pragma once
 
-struct PageLayout;
+#include "PageSettings.hpp"
+
 class GlueMapWindow;
 class Widget;
 
@@ -21,6 +22,13 @@ namespace PageActions
    */
   [[gnu::pure]]
   const PageLayout &GetCurrentLayout();
+
+  /**
+   * True after pan was disabled without Restore(), leaving the transient
+   * FullScreen layout active while a different page is configured.
+   */
+  [[gnu::pure]]
+  bool IsStuckPanFullScreenLayout() noexcept;
 
   /**
    * Opens the next page.
@@ -108,8 +116,27 @@ namespace PageActions
   void ShowWeatherPage();
 
   /**
+   * Preserve active weather overlays across a temporary pan full-screen.
+   */
+  void SuspendWeatherOverlaysForPan() noexcept;
+
+  /**
+   * Clear temporary pan suspension flags for all weather overlays.
+   */
+  void ResumeWeatherOverlaysAfterPan() noexcept;
+
+  /**
    * Use a custom widget for the "bottom" area.  This is a wrapper for
    * MainWindow::SetBottomWidget().  Call RestoreBottom() to undo this.
    */
   void SetCustomBottom(Widget *widget);
+
+  /**
+   * Whether map overlay buttons (menu, QuickMenu, zoom) should be
+   * shown.  False for most special pages (e.g. pan fullscreen); true
+   * when #special_page is only a #SetCustomBottom() overlay such as a
+   * QuestionWidget on an otherwise normal map page.
+   */
+  [[gnu::pure]]
+  bool AllowMapOverlayButtons() noexcept;
 };

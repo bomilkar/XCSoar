@@ -19,7 +19,9 @@
 #include "Components.hpp"
 #include "BackendComponents.hpp"
 #include "DataGlobals.hpp"
+#include "PageActions.hpp"
 #include "PageSettings.hpp"
+#include "Weather/Features.hpp"
 
 using namespace CommonInterface;
 
@@ -27,6 +29,9 @@ namespace ActionInterface {
 static void
 SendGetComputerSettings() noexcept;
 }
+
+static void
+UpdateMapScalePageInfo(UIState &state) noexcept;
 
 void
 XCSoarInterface::ReceiveGPS() noexcept
@@ -256,6 +261,8 @@ ActionInterface::SendMapSettings(const bool trigger_draw) noexcept
 void
 ActionInterface::SendUIState(const bool trigger_draw) noexcept
 {
+  UpdateMapScalePageInfo(SetUIState());
+
   main_window->SetUIState(GetUIState());
 
   if (trigger_draw)
@@ -281,27 +288,36 @@ GetPanelIndex(const UIState &ui_state)
 }
 
 static void
-UpdateMapScalePageInfo(UIState &state,
-                       const UISettings &settings) noexcept
+UpdateMapScalePageInfo(UIState &state) noexcept
 {
   const PagesState &pages = state.pages;
-  const PageLayout &layout = pages.special_page.IsDefined()
-    ? pages.special_page
-    : settings.pages.pages[pages.current_index];
+  const PageLayout &configured = PageActions::GetConfiguredLayout();
+  const PageLayout &layout = PageActions::GetCurrentLayout();
 
-  state.page_overlay = layout.IsMapMain()
-    ? layout.overlay
+  /* Pan fullscreen keeps the configured map overlay visible — retain its
+     type for RASP HUD logic and show the active layer in the PAN string. */
+  const PageLayout &overlay_layout =
+    (pages.special_page.IsDefined() &&
+     pages.special_page == PageLayout::FullScreen() &&
+     configured.IsMapMain() &&
+     configured.overlay != PageLayout::Overlay::NONE)
+    ? configured
+    : layout;
+
+  state.page_overlay = overlay_layout.IsMapMain()
+    ? overlay_layout.overlay
     : PageLayout::Overlay::NONE;
 
   state.map_scale_page_title.clear();
 
-  if (layout.IsMapMain() &&
-      layout.overlay != PageLayout::Overlay::NONE) {
-    const char *title = layout.MakeTitle(settings.info_boxes,
-                                         std::span{state.map_scale_page_title.data(),
-                                                   state.map_scale_page_title.capacity()},
-                                         DataGlobals::GetRasp().get(),
-                                         true);
+  if (overlay_layout.IsMapMain() &&
+      overlay_layout.overlay != PageLayout::Overlay::NONE) {
+    const auto &settings = CommonInterface::GetUISettings();
+    const char *title = overlay_layout.MakeTitle(
+      settings.info_boxes,
+      std::span{state.map_scale_page_title.data(),
+                state.map_scale_page_title.capacity()},
+      DataGlobals::GetRasp().get(), true);
     if (title != nullptr)
       state.map_scale_page_title = title;
   }
@@ -320,12 +336,14 @@ ActionInterface::UpdateDisplayMode() noexcept
   const auto &panel = settings.info_boxes.panels[state.panel_index];
   state.panel_name = gettext(panel.name);
 
-  UpdateMapScalePageInfo(state, settings);
+  UpdateMapScalePageInfo(state);
 }
 
 void
 ActionInterface::SendUIState() noexcept
 {
+  UpdateMapScalePageInfo(SetUIState());
+
   /* force-update all InfoBoxes just in case the display mode has
      changed */
   InfoBoxManager::SetDirty();

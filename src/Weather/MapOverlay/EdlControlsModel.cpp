@@ -3,141 +3,243 @@
 
 #include "EdlControlsModel.hpp"
 
+#include "ActionInterface.hpp"
+#include "Components.hpp"
+#include "Dialogs/Message.hpp"
 #include "Interface.hpp"
 #include "Language/Language.hpp"
-#include "PageActions.hpp"
+#include "Language/FormatText.hpp"
+#include "util/StaticString.hxx"
+#include "NetComponents.hpp"
 #include "UIState.hpp"
-#include "Weather/EDL/Levels.hpp"
+#include "Weather/EDL/FieldControls.hpp"
+#include "Weather/EDL/Glue.hpp"
 #include "Weather/EDL/StateController.hpp"
-#include "Form/DataField/Enum.hpp"
 
-#include <chrono>
+namespace WeatherMapOverlay {
 
-namespace MapOverlay {
-
-bool
-EdlControlsModel::OnShow(Usage usage, PageLayout::Overlay overlay) noexcept
+EdlControlsModel::~EdlControlsModel() noexcept
 {
-  if (overlay != PageLayout::Overlay::EDL)
-    return false;
-
-  EDL::EnsureInitialised();
-
-  const bool edl_page = PageActions::GetCurrentLayout().UsesEdlOverlay();
-
-  const auto &basic = CommonInterface::Basic();
-  if (basic.date_time_utc.IsPlausible())
-    EDL::OnTimeUpdate(basic.date_time_utc);
-  else
-    EDL::OnTimeUpdate(BrokenDateTime::NowUTC());
-
-  return usage == Usage::MAP_BOTTOM && edl_page && !EDL::OverlayVisible();
+  UnregisterEdlDownloadListener();
 }
 
 void
-EdlControlsModel::FillForecastChoices(DataFieldEnum &field) noexcept
+EdlControlsModel::UnregisterEdlDownloadListener() noexcept
+{
+  if (edl_listener_glue == nullptr)
+    return;
+
+  edl_listener_glue->RemoveListener(*this);
+  edl_listener_glue = nullptr;
+}
+
+void
+EdlControlsModel::OnShow() noexcept
 {
   EDL::EnsureInitialised();
 
-  auto selected_time = EDL::GetForecastTime();
-  if (!selected_time.IsPlausible())
-    selected_time = EDL::GetTrackedForecastTime(BrokenDateTime::NowUTC());
-
-  if (!selected_time.IsPlausible())
-    return;
-
-  CommonInterface::SetUIState().weather.edl.forecast_datetime = selected_time;
-
-  field.ClearChoices();
-
-  const auto base_time = selected_time + std::chrono::hours{-11};
-  unsigned selected_index = 0;
-  for (unsigned i = 0; i < forecast_choices; ++i) {
-    forecast_times[i] = base_time + std::chrono::hours{i};
-    StaticString<32> label;
-    label.Format("%02u:00", unsigned(forecast_times[i].ToLocal().hour));
-    field.AddChoice(i, label.c_str());
-
-    if (forecast_times[i] == selected_time)
-      selected_index = i;
+  if (edl_listener_glue == nullptr &&
+      net_components != nullptr && net_components->edl != nullptr) {
+    edl_listener_glue = net_components->edl.get();
+    edl_listener_glue->AddListener(*this);
   }
-
-  field.SetValue(selected_index);
 }
 
 void
-EdlControlsModel::SelectForecast(unsigned index) noexcept
+EdlControlsModel::OnHide() noexcept
 {
-  if (index >= forecast_times.size())
-    return;
-
-  EDL::EnsureInitialised();
-  auto &edl = CommonInterface::SetUIState().weather.edl;
-  edl.forecast_datetime = forecast_times[index];
-  edl.forecast_auto_advance = false;
+  EDL::ClearGpsUiRefreshPending();
+  UnregisterEdlDownloadListener();
 }
 
 bool
-EdlControlsModel::GetForecastAutoAdvance() const noexcept
+EdlControlsModel::StepPrimary(int delta) noexcept
+{
+  return EDL::StepForecastTime(delta);
+}
+
+bool
+EdlControlsModel::StepSecondary(int delta) noexcept
+{
+  return EDL::StepLevel(delta);
+}
+
+void
+EdlControlsModel::ResumePrimaryAuto() noexcept
+{
+  if (GetPrimaryAutoAdvance())
+    return;
+
+  EnablePrimaryAutoFromInput();
+}
+
+void
+EdlControlsModel::ResumeSecondaryAuto() noexcept
+{
+  if (GetSecondaryAutoAdvance())
+    return;
+
+  SetSecondaryAutoAdvance(true);
+  ApplySecondaryAutoAdvance();
+  Notify(ControlsUpdate::OVERLAY);
+}
+
+void
+EdlControlsModel::FormatPrimaryLabel(StaticString<64> &text) const noexcept
+{
+  EDL::FormatTimeCursorLabel(text, GetPrimaryAutoAdvance());
+}
+
+void
+EdlControlsModel::FormatSecondaryLabel(StaticString<64> &text) const noexcept
+{
+  EDL::FormatLevelCursorLabel(text, GetSecondaryAutoAdvance());
+}
+
+bool
+EdlControlsModel::HasPrimaryData() const noexcept
+{
+  return EDL::HasOverlayCache();
+}
+
+bool
+EdlControlsModel::HasSecondaryData() const noexcept
+{
+  return EDL::HasOverlayCache();
+}
+
+bool
+EdlControlsModel::GetPrimaryAutoAdvance() const noexcept
 {
   return CommonInterface::GetUIState().weather.edl.forecast_auto_advance;
 }
 
 void
-EdlControlsModel::SetForecastAutoAdvance(bool auto_advance) noexcept
+EdlControlsModel::SetPrimaryAutoAdvance(bool auto_advance) noexcept
 {
   CommonInterface::SetUIState().weather.edl.forecast_auto_advance =
     auto_advance;
 }
 
 void
-EdlControlsModel::FillLevelChoices(DataFieldEnum &field) const noexcept
+EdlControlsModel::ApplyPrimaryAutoAdvance() noexcept
 {
-  field.ClearChoices();
+  if (!GetPrimaryAutoAdvance())
+    return;
 
-  for (unsigned i = 0; i < EDL::NUM_ISOBARS; ++i) {
-    StaticString<32> label;
-    label.Format(_("%u hPa (%d m)"),
-                 EDL::ISOBARS[i] / 100,
-                 EDL::GetAltitudeForIsobar(EDL::ISOBARS[i]));
-    field.AddChoice(EDL::ISOBARS[i], label.c_str());
-  }
-
-  field.SetValue(EDL::GetIsobar());
+  const auto &basic = CommonInterface::Basic();
+  if (basic.date_time_utc.IsPlausible())
+    EDL::OnTimeUpdate(basic.date_time_utc);
 }
 
 void
-EdlControlsModel::SelectLevel(unsigned isobar) noexcept
+EdlControlsModel::EnablePrimaryAutoFromInput() noexcept
 {
-  EDL::EnsureInitialised();
-  auto &edl = CommonInterface::SetUIState().weather.edl;
-  edl.SelectIsobar(isobar);
-  edl.forecast_auto_advance = false;
+  EDL::EnableForecastAutoFromInput();
+  NotifyOverlay();
 }
 
-unsigned
-EdlControlsModel::SelectedCachedDayIndex(const std::vector<EDL::CachedDay> &days) const noexcept
+PrimaryLabelAction
+EdlControlsModel::GetPrimaryLabelAction() const noexcept
 {
-  if (days.empty())
-    return 0;
-
-  const auto current_day = EDL::GetForecastTime().AtMidnight();
-  for (unsigned i = 0; i < days.size(); ++i)
-    if (days[i].day == current_day)
-      return i;
-
-  return 0;
+  return PrimaryLabelAction::OPEN_PICKER;
 }
 
-StaticString<40>
-EdlControlsModel::FormatCachedDayLabel(const EDL::CachedDay &day) const noexcept
+void
+EdlControlsModel::OpenPrimaryPicker() noexcept
 {
-  StaticString<40> label;
-  label.Format("%04u-%02u-%02u (%s, %u)",
-               day.day.year, day.day.month, day.day.day,
-               day.IsComplete() ? _("Complete") : _("Partial"),
-               day.file_count);
-  return label;
+  EDL::OpenTimePicker();
+  NotifyOverlay();
 }
 
-} // namespace MapOverlay
+SecondaryLabelAction
+EdlControlsModel::GetSecondaryLabelAction() const noexcept
+{
+  return SecondaryLabelAction::OPEN_PICKER;
+}
+
+SecondaryPickerResult
+EdlControlsModel::OpenSecondaryPicker() noexcept
+{
+  return HandleSecondaryFieldPicker(EDL::OpenLevelPicker(true), [this] {
+    Notify(ControlsUpdate::OVERLAY);
+  });
+}
+
+bool
+EdlControlsModel::SupportsSecondaryAutoAdvance() const noexcept
+{
+  return true;
+}
+
+bool
+EdlControlsModel::GetSecondaryAutoAdvance() const noexcept
+{
+  return CommonInterface::GetUIState().weather.edl.level_auto_advance;
+}
+
+void
+EdlControlsModel::SetSecondaryAutoAdvance(bool auto_advance) noexcept
+{
+  if (auto_advance)
+    EDL::EnableLevelAutoFromInput();
+  else {
+    auto &edl = CommonInterface::SetUIState().weather.edl;
+    edl.level_auto_advance = false;
+    EDL::SelectLevel(edl.isobar);
+  }
+}
+
+void
+EdlControlsModel::ApplySecondaryAutoAdvance() noexcept
+{
+  EDL::UpdateCurrentLevel();
+}
+
+void
+EdlControlsModel::RefreshOverlay() noexcept
+{
+#if !defined(HAVE_HTTP)
+  StaticString<128> message;
+  FormatFeatureNotAvailableInThisBuild(message, C_("Setting", "HTTP support"));
+  ShowMessageBox(message, _("Weather"), MB_OK);
+#else
+  if (!EDL::OverlayEnabled())
+    return;
+
+  EDL::RequestOverlayRefresh();
+#endif
+}
+
+void
+EdlControlsModel::OnGPSUpdate([[maybe_unused]] const MoreData &basic) noexcept
+{
+  const auto &state = CommonInterface::GetUIState().weather.edl;
+  /* "Now" stores an invalid datetime and still needs hourly UI/overlay
+     refresh even when neither Auto flag is set. */
+  const bool follows_now = !state.forecast_auto_advance &&
+    !state.forecast_datetime.IsPlausible();
+  if (!(GetPrimaryAutoAdvance() || GetSecondaryAutoAdvance() ||
+        follows_now))
+    return;
+
+  Notify(EDL::TakeGpsUiRefreshPending()
+         ? ControlsUpdate::OVERLAY
+         : ControlsUpdate::LABELS);
+}
+
+void
+EdlControlsModel::OnDownloadFinished(
+  const EDL::DownloadNotification &notification) noexcept
+{
+  Notify(ControlsUpdate::LABELS);
+
+  if (notification.job != EDL::DownloadJob::OVERLAY ||
+      EDL::OverlayVisible())
+    return;
+
+  if (EDL::TryApplyOverlayFromCache())
+    ActionInterface::ScheduleSendUIState();
+}
+
+} // namespace WeatherMapOverlay

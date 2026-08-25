@@ -2,6 +2,7 @@
 // Copyright The XCSoar Project
 
 #include "FileManager.hpp"
+#include "EmptyDownloadList.hpp"
 #include "WidgetDialog.hpp"
 #include "Message.hpp"
 #include "UIGlobals.hpp"
@@ -37,22 +38,6 @@
 #include <cassert>
 
 using std::string_view_literals::operator""sv;
-
-[[gnu::pure]]
-static AllocatedPath
-GetRelativePathByType(const AvailableFile &file)
-{
-  const auto base = file.GetName();
-  if (base == nullptr)
-    return nullptr;
-
-  const AllocatedPath subdir = GetFileTypeDefaultDir(file.type);
-  if (subdir == nullptr)
-    return AllocatedPath(base);
-
-  return AllocatedPath::Build(subdir, Path(base));
-}
-
 
 [[gnu::pure]]
 static AllocatedPath
@@ -96,16 +81,10 @@ static bool
 UpdateAvailable(const FileRepository &repository, const char *name)
 {
   const AvailableFile *remote_file = FindRemoteFile(repository, name);
-
   if (remote_file == nullptr)
     return false;
 
-  BrokenDate remote_changed = remote_file->update_date;
-
-  const auto path = LocalPathByType(*remote_file);
-  BrokenDate local_changed = BrokenDateTime{File::GetLastModification(path)};
-
-  return local_changed < remote_changed;
+  return IsRemoteFileOutOfDate(*remote_file);
 }
 #endif
 
@@ -291,6 +270,17 @@ public:
   unsigned OnListResized() noexcept override;
   void OnCursorMoved(unsigned index) noexcept override;
 
+  /* virtual methods from ListCursorHandler */
+  bool CanActivateItem(unsigned index) const noexcept override {
+#ifdef HAVE_DOWNLOAD_MANAGER
+    if (items.empty())
+      return Net::DownloadManager::IsAvailable() && index == 0;
+#endif
+    return index < items.size();
+  }
+
+  void OnActivateItem(unsigned index) noexcept override;
+
 #ifdef HAVE_DOWNLOAD_MANAGER
   void OnTimer();
 
@@ -411,7 +401,12 @@ ManagedFileListWidget::RefreshList()
   }
 
   ListControl &list = GetList();
+#ifdef HAVE_DOWNLOAD_MANAGER
+  list.SetLength(items.empty() && Net::DownloadManager::IsAvailable()
+                 ? size_t{1} : items.size());
+#else
   list.SetLength(items.size());
+#endif
   list.Invalidate();
 
 #ifdef HAVE_DOWNLOAD_MANAGER
@@ -426,7 +421,7 @@ ManagedFileListWidget::CreateButtons(WidgetDialog &dialog) noexcept
 #ifdef HAVE_DOWNLOAD_MANAGER
   if (Net::DownloadManager::IsAvailable()) {
     download_button = dialog.AddButton(_("Update"), [this](){ Download(); });
-    add_button = dialog.AddButton(_("Add"), [this](){ Add(); });
+    add_button = dialog.AddButton(C_("Button", "Add"), [this](){ Add(); });
     cancel_button = dialog.AddButton(_("Abort"), [this](){ Cancel(); });
     update_button = dialog.AddButton(_("Update all"), [this](){
       UpdateFiles();
@@ -442,13 +437,32 @@ ManagedFileListWidget::UpdateButtons()
 {
 #ifdef HAVE_DOWNLOAD_MANAGER
   if (Net::DownloadManager::IsAvailable()) {
+    if (items.empty()) {
+      download_button->SetEnabled(false);
+      cancel_button->SetEnabled(false);
+      update_button->SetEnabled(false);
+      return;
+    }
+
     const unsigned current = GetList().GetCursorIndex();
 
-    download_button->SetEnabled(!items.empty() &&
-                                CanDownload(repository, items[current].name));
-    cancel_button->SetEnabled(!items.empty() && items[current].downloading);
-    update_button->SetEnabled(!items.empty() && some_out_of_date);
+    download_button->SetEnabled(CanDownload(repository, items[current].name));
+    cancel_button->SetEnabled(items[current].downloading);
+    update_button->SetEnabled(some_out_of_date);
   }
+#endif
+}
+
+void
+ManagedFileListWidget::OnActivateItem(unsigned index) noexcept
+{
+#ifdef HAVE_DOWNLOAD_MANAGER
+  if (items.empty()) {
+    assert(index == 0);
+    Add();
+  }
+#else
+  (void)index;
 #endif
 }
 
@@ -456,6 +470,14 @@ void
 ManagedFileListWidget::OnPaintItem(Canvas &canvas, const PixelRect rc,
                                    unsigned i) noexcept
 {
+#ifdef HAVE_DOWNLOAD_MANAGER
+  if (items.empty() && Net::DownloadManager::IsAvailable()) {
+    assert(i == 0);
+    DrawEmptyDownloadHint(row_renderer, canvas, rc);
+    return;
+  }
+#endif
+
   const FileItem &file = items[i];
 
   row_renderer.DrawFirstRow(canvas, rc, file.name.c_str());
@@ -532,28 +554,7 @@ void
 ManagedFileListWidget::DownloadRemoteFile(const AvailableFile &remote_file)
 {
   assert(Net::DownloadManager::IsAvailable());
-
-  if (remote_file.GetName() == nullptr)
-    return;
-
-  const AllocatedPath subdir = GetFileTypeDefaultDir(remote_file.type);
-  AllocatedPath path = nullptr;
-  if (subdir != nullptr) {
-    const auto dest_path = LocalPath(subdir);
-    Directory::CreateRecursive(dest_path);
-    if (!Directory::Exists(dest_path)) {
-      ShowMessageBox(_("Subdirectory does not exist and could not be created."),
-                     _("Error"), MB_OK);
-      return;
-    }
-    path = AllocatedPath::Build(subdir, Path(remote_file.GetName()));
-  } else {
-    path = AllocatedPath(remote_file.GetName());
-    if (path == nullptr)
-      return;
-  }
-
-  Net::DownloadManager::Enqueue(remote_file.uri.c_str(), path);
+  EnqueueRemoteFileDownload(remote_file);
 }
 
 
@@ -625,8 +626,13 @@ ManagedFileListWidget::Add()
       list.push_back(remote_file);
   }
 
-  if (list.empty())
+  if (list.empty()) {
+    /* Empty File Manager with no index yet: retry repository download
+       (same as DownloadFilePicker's empty-list activate). */
+    if (repository.begin() == repository.end())
+      EnqueueRepositoryDownload(true);
     return;
+  }
 
   AddFileListItemRenderer item_renderer(list, look);
   int i = ListPicker(_("Select a file"),
@@ -654,11 +660,12 @@ ManagedFileListWidget::UpdateFiles() {
       const AvailableFile *remote_file = FindRemoteFile(repository, file.name);
 
       if (remote_file != nullptr) {
-        const auto relative_path = GetRelativePathByType(*remote_file);
+        const auto relative_path = GetFileDownloadRelativePath(*remote_file);
         if (relative_path == nullptr)
-          return;
+          continue;
 
-        Net::DownloadManager::Enqueue(remote_file->GetURI(), relative_path);
+        Net::DownloadManager::Enqueue(remote_file->GetURI(),
+                                      Path(relative_path.c_str()));
       }
     }
   }
@@ -680,7 +687,7 @@ ManagedFileListWidget::Cancel()
   const FileItem &item = items[current];
   const AvailableFile *remote_file = FindRemoteFile(repository, item.name);
   if (remote_file != nullptr) {
-    if (const auto relative_path = GetRelativePathByType(*remote_file);
+    if (const auto relative_path = GetFileDownloadRelativePath(*remote_file);
         relative_path != nullptr) {
       Net::DownloadManager::Cancel(relative_path);
       return;

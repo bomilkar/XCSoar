@@ -272,7 +272,7 @@ NOTAMConfigPanel::OnUpdateButton() noexcept
     const auto &basic = CommonInterface::Basic();
     if (!basic.location_available || !basic.location.IsValid()) {
       UpdateFilterCounts();
-      ShowMessageBox(_("No valid location."), _("NOTAM"),
+      ShowMessageBox(_("No valid location."), C_("Menu", "NOTAM"),
                      MB_OK | MB_ICONEXCLAMATION);
       return;
     }
@@ -307,7 +307,7 @@ void
 NOTAMConfigPanel::SetFilterRowLoading(const unsigned control) noexcept
 {
 #ifdef HAVE_HTTP
-  SetText(control, _("Loading..."));
+  SetText(control, C_("Status", "Loading..."));
 #else
   (void)control;
 #endif
@@ -391,6 +391,11 @@ NOTAMConfigPanel::OnModified(DataField &df) noexcept
 #ifdef HAVE_HTTP
   if (IsDataField(ENABLE_NOTAM, df)) {
     UpdateVisibility();
+
+    const auto &enabled_field =
+      static_cast<const DataFieldBoolean &>(df);
+    if (enabled_field.GetValue())
+      UpdateFilterCounts();
   }
 #endif
 }

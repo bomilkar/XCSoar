@@ -47,6 +47,11 @@
 #include "FLARM/Global.hpp"
 #include "FLARM/TrafficDatabases.hpp"
 #include "FLARM/MessagingRecord.hpp"
+#include "Tracking/SkyLines/FlarmTrafficBuilder.hpp"
+#include "Tracking/SkyLines/TrafficExtensions.hpp"
+#include "Tracking/SkyLines/Protocol.hpp"
+#include "Tracking/SkyLines/Handler.hpp"
+#include "Tracking/CloudSettings.hpp"
 #include "Device/RecordedFlight.hpp"
 #include "Device/device.hpp"
 #include "Engine/Waypoint/Waypoint.hpp"
@@ -69,10 +74,14 @@
 #include "util/PackedFloat.hxx"
 
 #include <chrono>
+#include <cstring>
 #include <memory>
+#include <span>
 
 #ifdef _WIN32
 #include <process.h>
+/* winerror.h may define NO_ERROR after FLARM/Error.hpp was included. */
+#undef NO_ERROR
 #else
 #include <unistd.h>
 #endif
@@ -190,6 +199,78 @@ TestTasman()
   ok1(equals(nmea_info.pressure_altitude, Units::ToSysUnit(-1574, Unit::FEET)));
   ok1(nmea_info.airspeed_available);
   ok1(equals(nmea_info.true_airspeed, Units::ToSysUnit(62, Unit::KNOTS)));
+}
+
+static void
+TestLK8EX1()
+{
+  NMEAParser parser;
+
+  NMEAInfo nmea_info;
+  nmea_info.Reset();
+  nmea_info.clock = TimeStamp{FloatDuration{1}};
+
+  /* pressure present: altitude field ignored; voltage battery */
+  ok1(parser.ParseLine("$LK8EX1,101325,99999,0,25.0,3.70*31", nmea_info));
+  ok1(nmea_info.static_pressure_available);
+  ok1(equals(nmea_info.static_pressure.GetPascal(), 101325));
+  ok1(!nmea_info.pressure_altitude_available);
+  ok1(nmea_info.noncomp_vario_available);
+  ok1(equals(nmea_info.noncomp_vario, 0));
+  ok1(nmea_info.temperature_available);
+  ok1(equals(nmea_info.temperature.ToCelsius(), 25));
+  ok1(nmea_info.voltage_available);
+  ok1(equals(nmea_info.voltage, 3.70));
+  ok1(!nmea_info.battery_level_available);
+
+  /* altitude-only + negative vario; missing temp/battery sentinels */
+  nmea_info.Reset();
+  nmea_info.clock = TimeStamp{FloatDuration{1}};
+  ok1(parser.ParseLine("$LK8EX1,999999,1500,-50,99,999*2A", nmea_info));
+  ok1(!nmea_info.static_pressure_available);
+  ok1(nmea_info.pressure_altitude_available);
+  ok1(equals(nmea_info.pressure_altitude, 1500));
+  ok1(nmea_info.noncomp_vario_available);
+  ok1(equals(nmea_info.noncomp_vario, -0.5));
+  ok1(!nmea_info.temperature_available);
+  ok1(!nmea_info.voltage_available);
+  ok1(!nmea_info.battery_level_available);
+
+  /* all missing sentinels */
+  nmea_info.Reset();
+  nmea_info.clock = TimeStamp{FloatDuration{1}};
+  ok1(parser.ParseLine("$LK8EX1,999999,99999,9999,99,999*3F", nmea_info));
+  ok1(!nmea_info.static_pressure_available);
+  ok1(!nmea_info.pressure_altitude_available);
+  ok1(!nmea_info.noncomp_vario_available);
+  ok1(!nmea_info.temperature_available);
+  ok1(!nmea_info.voltage_available);
+  ok1(!nmea_info.battery_level_available);
+
+  /* battery percentage encoding (14%) */
+  nmea_info.Reset();
+  nmea_info.clock = TimeStamp{FloatDuration{1}};
+  ok1(parser.ParseLine("$LK8EX1,98725,99999,120,21.5,1014*18", nmea_info));
+  ok1(nmea_info.static_pressure_available);
+  ok1(equals(nmea_info.static_pressure.GetPascal(), 98725));
+  ok1(nmea_info.noncomp_vario_available);
+  ok1(equals(nmea_info.noncomp_vario, 1.2));
+  ok1(nmea_info.temperature_available);
+  ok1(equals(nmea_info.temperature.ToCelsius(), 21.5));
+  ok1(nmea_info.battery_level_available);
+  ok1(equals(nmea_info.battery_level, 14));
+  ok1(!nmea_info.voltage_available);
+
+  /* 0% battery via 1000+percent */
+  nmea_info.Reset();
+  nmea_info.clock = TimeStamp{FloatDuration{1}};
+  ok1(parser.ParseLine("$LK8EX1,101325,99999,0,25,1000*34", nmea_info));
+  ok1(nmea_info.battery_level_available);
+  ok1(equals(nmea_info.battery_level, 0));
+  ok1(!nmea_info.voltage_available);
+
+  /* bad checksum */
+  ok1(!parser.ParseLine("$LK8EX1,101325,99999,0,25.0,3.70*00", nmea_info));
 }
 
 static void
@@ -333,6 +414,19 @@ TestFLARM()
     skip(15, 0, "traffic == NULL");
   }
 
+  /* ADS-B airliner GS via PFLAA; used to wrap RoughSpeed above 127 m/s. */
+  ok1(parser.ParseLine("$PFLAA,0,100,-150,10,1,4CAAAA,90,,223,0,8*1B",
+                       nmea_info));
+
+  id = FlarmId::Parse("4CAAAA", NULL);
+  traffic = nmea_info.flarm.traffic.FindTraffic(id);
+  if (ok1(traffic != NULL)) {
+    ok1(traffic->speed_received);
+    ok1(equals(traffic->speed, 223));
+  } else {
+    skip(2, 0, "traffic == NULL");
+  }
+
   // PFLAA with IDType=0 (random ID)
   ok1(parser.ParseLine("$PFLAA,0,300,400,20,0,ABC123,90,,20,,8*30",
                        nmea_info));
@@ -431,7 +525,7 @@ TestFLARM()
 
   // PFLAE without message (pre-v7 style)
   ok1(parser.ParseLine("$PFLAE,A,0,0*33", nmea_info));
-  ok1(nmea_info.flarm.error.severity == FlarmError::NO_ERROR);
+  ok1(nmea_info.flarm.error.severity == FlarmError::Severity::NO_ERROR);
   ok1(nmea_info.flarm.error.code == (FlarmError::Code)0);
   ok1(nmea_info.flarm.error.message.empty());
 
@@ -586,12 +680,56 @@ TestBlueFly()
   ok1(device->ParseNMEA("BAT 1068", nmea_info)); //4.2V
   ok1(nmea_info.battery_level_available);
   ok1(equals(nmea_info.battery_level, 100.0));
+  ok1(nmea_info.voltage_available);
+  ok1(equals(nmea_info.voltage, 4.2));
   ok1(device->ParseNMEA("BAT EFE", nmea_info)); //3.84V
   ok1(nmea_info.battery_level_available);
   ok1(equals(nmea_info.battery_level, 50.0));
+  ok1(nmea_info.voltage_available);
+  ok1(equals(nmea_info.voltage, 3.838));
   ok1(device->ParseNMEA("BAT ED8", nmea_info)); //3.80V
   ok1(nmea_info.battery_level_available);
   ok1(equals(nmea_info.battery_level, 37.3333));
+  ok1(nmea_info.voltage_available);
+  ok1(equals(nmea_info.voltage, 3.8));
+
+  ok1(device->ParseNMEA("TMP 231", nmea_info)); //23.1 °C
+  ok1(nmea_info.temperature_available);
+  ok1(equals(nmea_info.temperature.ToCelsius(), 23.1));
+
+  nmea_info.Reset();
+  nmea_info.clock = TimeStamp{FloatDuration{1}};
+
+  ok1(!device->ParseNMEA("$BFV,101325,123,23.1,85,0*00", nmea_info));
+
+  ok1(device->ParseNMEA("$BFV,101325,123,23.1,85,0*69", nmea_info));
+  ok1(nmea_info.static_pressure_available);
+  ok1(equals(nmea_info.static_pressure.GetPascal(), 101325));
+  ok1(nmea_info.noncomp_vario_available);
+  ok1(equals(nmea_info.noncomp_vario, 1.23));
+  ok1(nmea_info.temperature_available);
+  ok1(equals(nmea_info.temperature.ToCelsius(), 23.1));
+  ok1(nmea_info.battery_level_available);
+  ok1(equals(nmea_info.battery_level, 85.0));
+  ok1(!nmea_info.dyn_pressure_available);
+  ok1(!nmea_info.voltage_available);
+
+  nmea_info.Reset();
+  nmea_info.clock = TimeStamp{FloatDuration{1}};
+
+  ok1(device->ParseNMEA("$BFX,101325,-50,18.5,40,12,3.84*74", nmea_info));
+  ok1(nmea_info.static_pressure_available);
+  ok1(equals(nmea_info.static_pressure.GetPascal(), 101325));
+  ok1(nmea_info.noncomp_vario_available);
+  ok1(equals(nmea_info.noncomp_vario, -0.5));
+  ok1(nmea_info.temperature_available);
+  ok1(equals(nmea_info.temperature.ToCelsius(), 18.5));
+  ok1(nmea_info.battery_level_available);
+  ok1(equals(nmea_info.battery_level, 40.0));
+  ok1(nmea_info.dyn_pressure_available);
+  ok1(equals(nmea_info.dyn_pressure.GetPascal(), 12));
+  ok1(nmea_info.voltage_available);
+  ok1(equals(nmea_info.voltage, 3.84));
 
   delete device;
 }
@@ -1317,6 +1455,32 @@ TestLX(const struct DeviceRegister &driver, bool condor=false, bool reciprocal_w
   ok1(equals(nmea_info.external_wind.norm, 10.1 / 3.6));
   ok1(equals(nmea_info.external_wind.bearing, reciprocal_wind ? 354 : 174));
 
+  if (!condor) {
+    /* Partial six-slot vario with airspeed: still TE (#2763). */
+    nmea_info.Reset();
+    nmea_info.clock = TimeStamp{FloatDuration{1}};
+    ok1(device->ParseNMEA("$LXWP0,Y,222.3,1665.5,1.71,,,,,,239,174,10.1*47",
+                          nmea_info));
+    ok1(nmea_info.pressure_altitude_available);
+    ok1(equals(nmea_info.pressure_altitude, 1665.5));
+    ok1(nmea_info.airspeed_available);
+    ok1(nmea_info.total_energy_vario_available);
+    ok1(equals(nmea_info.total_energy_vario, 1.71));
+    ok1(nmea_info.external_wind_available);
+
+    /* BlueFly LX mode: no airspeed — uncompensated, not TE. */
+    nmea_info.Reset();
+    nmea_info.clock = TimeStamp{FloatDuration{1}};
+    ok1(device->ParseNMEA("$LXWP0,N,,119.9,0.16,,,,,,259,,*64",
+                          nmea_info));
+    ok1(nmea_info.pressure_altitude_available);
+    ok1(equals(nmea_info.pressure_altitude, 119.9));
+    ok1(!nmea_info.airspeed_available);
+    ok1(!nmea_info.total_energy_vario_available);
+    ok1(nmea_info.noncomp_vario_available);
+    ok1(equals(nmea_info.noncomp_vario, 0.16));
+  }
+
 
   nmea_info.Reset();
   nmea_info.clock = TimeStamp{FloatDuration{1}};
@@ -1502,19 +1666,19 @@ TestCondor3UDP()
   ok1(device->ParseNMEA("compass=270", info));
   ok1(info.attitude.heading_available);
   ok1(equals(info.attitude.heading.Degrees(), 270));
-  ok1(info.track_available);
-  ok1(equals(info.track.Degrees(), 270));
+  ok1(!info.track_available);
 
   next_step();
   ok1(device->ParseNMEA("compass=90", info));
-  ok1(info.track_available);
-  ok1(equals(info.track.Degrees(), 90));
+  ok1(info.attitude.heading_available);
+  ok1(equals(info.attitude.heading.Degrees(), 90));
+  ok1(!info.track_available);
   ++step;
   info.clock = TimeStamp{FloatDuration{step}};
   info.alive.Update(info.clock);
   ok1(device->ParseNMEA("vx=30", info));
   ok1(device->ParseNMEA("vy=40", info));
-  ok1(equals(info.track.Degrees(), 90));
+  ok1(!info.track_available);
   ok1(equals(info.ground_speed, 50));
 
   next_step();
@@ -1697,6 +1861,7 @@ TestLXV7()
   NMEAInfo basic;
   basic.Reset();
   basic.clock = TimeStamp{FloatDuration{1}};
+  basic.alive.Update(basic.clock);
 
   LXDevice &lx_device = *(LXDevice *)device;
   lx_device.ResetDeviceDetection();
@@ -1711,6 +1876,19 @@ TestLXV7()
   ok1(basic.acceleration.available);
   ok1(equals(basic.acceleration.g_load, 1.331));
 
+  /* After $PLXVF, $LXWP0 must not overwrite pressure altitude or TE vario
+     (ALTOFF-adjusted LXWP0 altitude vs raw PLXVF PressAlt, #2754). */
+  basic.clock = TimeStamp{FloatDuration{2}};
+  ok1(device->ParseNMEA("$LXWP0,Y,222.3,1665.5,1.71,1.71,1.71,1.71,1.71,1.71,239,174,10.1*5E",
+                        basic));
+  ok1(basic.pressure_altitude_available);
+  ok1(equals(basic.pressure_altitude, 244.3));
+  ok1(basic.total_energy_vario_available);
+  ok1(equals(basic.total_energy_vario, -0.25));
+  ok1(basic.airspeed_available);
+  ok1(basic.external_wind_available);
+
+  basic.clock = TimeStamp{FloatDuration{3}};
   ok1(device->ParseNMEA("$PLXVS,23.1,0,12.3,*71", basic));
   ok1(basic.temperature_available);
   ok1(equals(basic.temperature.ToKelvin(), 296.25));
@@ -3021,23 +3199,195 @@ TestMalformedInput()
   ok1(parser.ParseLine("$GPGSA,,,,,,,,,,,,,,,,,*6E", nmea_info));
 }
 
+static void
+TestFlarmTrafficBuilder()
+{
+  ok1(SkyLinesTracking::FlarmTrafficBuilder::ResolveId(0x80123456u,
+       FlarmId::Undefined()) == FlarmId::FromValue(0x123456u));
+
+  const FlarmId defined = FlarmId::FromValue(0xABCDEFu);
+  ok1(SkyLinesTracking::FlarmTrafficBuilder::ResolveId(0x123u, defined) ==
+      defined);
+
+  ok1(SkyLinesTracking::FlarmTrafficBuilder::SourceForOnline(
+        42u, SkyLinesTracking::TrafficSource::CLOUD) ==
+      FlarmTraffic::SourceType::CLOUD);
+  ok1(SkyLinesTracking::FlarmTrafficBuilder::SourceForOnline(
+        0x80000001u, SkyLinesTracking::TrafficSource::CLOUD) ==
+      FlarmTraffic::SourceType::OGN);
+  ok1(SkyLinesTracking::FlarmTrafficBuilder::SourceForOnline(
+        1u, SkyLinesTracking::TrafficSource::SKYLINES) ==
+      FlarmTraffic::SourceType::SKYLINES);
+
+  NMEAInfo basic;
+  basic.Reset();
+  basic.clock = TimeStamp{FloatDuration{1}};
+  basic.location = GeoPoint(Angle::Degrees(51), Angle::Degrees(7));
+  basic.location_available.Update(basic.clock);
+  basic.gps_altitude = 1000;
+  basic.gps_altitude_available.Update(basic.clock);
+
+  FlarmTraffic traffic = SkyLinesTracking::FlarmTrafficBuilder::Build(
+    0x80000001u, GeoPoint(Angle::Degrees(51.01), Angle::Degrees(7.01)),
+    1200, true, SkyLinesTracking::TrafficSource::CLOUD,
+    90, true, FlarmId::Undefined(), 1, nullptr);
+
+  ok1(traffic.source == FlarmTraffic::SourceType::OGN);
+  ok1(traffic.absolute_location);
+  ok1(traffic.absolute_altitude);
+  ok1(SkyLinesTracking::FlarmTrafficBuilder::FillRelative(traffic, basic));
+  ok1(traffic.relative_east != 0 || traffic.relative_north != 0);
+  ok1(equals(double(traffic.relative_altitude), 200));
+
+  basic.pressure_altitude = 950;
+  basic.pressure_altitude_available.Update(basic.clock);
+  ok1(SkyLinesTracking::FlarmTrafficBuilder::FillRelative(traffic, basic));
+  ok1(equals(double(traffic.relative_altitude), 250));
+
+  FlarmTraffic device_traffic{};
+  device_traffic.source = FlarmTraffic::SourceType::FLARM;
+  device_traffic.valid.Update(basic.clock);
+  const bool device_wins = device_traffic.valid &&
+    !FlarmTraffic::IsInjectedSource(device_traffic.source);
+  ok1(device_wins);
+
+  ok1(StringIsEqual(FlarmTraffic::GetSourceString(
+        FlarmTraffic::SourceType::OGN), "OGN"));
+
+  FlarmTraffic online_traffic{};
+  online_traffic.source = FlarmTraffic::SourceType::OGN;
+  const bool online_wins = !(online_traffic.valid &&
+    !FlarmTraffic::IsInjectedSource(online_traffic.source));
+  ok1(online_wins);
+
+  FlarmTraffic merged{};
+  merged.track_received = true;
+  merged.track = RoughAngle(Angle::Degrees(90));
+  FlarmTraffic partial = merged;
+  partial.track_received = false;
+  merged.UpdateOnline(partial);
+  ok1(merged.track_received);
+
+  const FlarmId radio = FlarmId::FromValue(0xABCDEFu);
+  const FlarmId other = FlarmId::FromValue(0x123456u);
+  const FlarmId own_ids[] = { radio };
+  ok1(SkyLinesTracking::FlarmTrafficBuilder::IsOwnShipId(own_ids, radio));
+  ok1(!SkyLinesTracking::FlarmTrafficBuilder::IsOwnShipId(own_ids, other));
+  ok1(!SkyLinesTracking::FlarmTrafficBuilder::IsOwnShipId(
+         std::span<const FlarmId>{}, radio));
+
+  const FlarmId multi[] = {
+    FlarmId::FromValue(0x111111u),
+    FlarmId::FromValue(0x222222u),
+  };
+  ok1(SkyLinesTracking::FlarmTrafficBuilder::IsOwnShipId(
+        multi, FlarmId::FromValue(0x222222u)));
+  ok1(!SkyLinesTracking::FlarmTrafficBuilder::IsOwnShipId(
+         multi, FlarmId::FromValue(0x333333u)));
+
+  const auto parsed =
+    CloudSettings::ParseOwnFlarmIds("ABCDEF, 111111,ABCDEF,zz,222222");
+  ok1(parsed.size() == 3);
+  ok1(parsed[0] == FlarmId::FromValue(0xABCDEFu));
+  ok1(parsed[1] == FlarmId::FromValue(0x111111u));
+  ok1(parsed[2] == FlarmId::FromValue(0x222222u));
+
+  char formatted[CloudSettings::OWN_FLARM_IDS_TEXT_SIZE];
+  CloudSettings::FormatOwnFlarmIds(parsed, formatted, sizeof(formatted));
+  ok1(StringIsEqual(formatted, "ABCDEF,111111,222222"));
+
+  /* Worst-case 8×8-hex ids must fit the format buffer. */
+  CloudSettings::OwnFlarmIdList full;
+  for (unsigned i = 0; i < CloudSettings::MAX_OWN_FLARM_IDS; ++i)
+    full.append(FlarmId::FromValue(0xF0000000u + i));
+  CloudSettings::FormatOwnFlarmIds(full, formatted, sizeof(formatted));
+  ok1(strlen(formatted) + 1 <= CloudSettings::OWN_FLARM_IDS_TEXT_SIZE);
+  ok1(CloudSettings::ParseOwnFlarmIds(formatted).size() ==
+      CloudSettings::MAX_OWN_FLARM_IDS);
+}
+
+static void
+TestTrafficExtensionsWire()
+{
+  using SkyLinesTracking::TrafficExtensions;
+
+  TrafficExtensions ext{};
+  ext.track_deg = 270;
+  ext.track_valid = true;
+  ext.aircraft_type = 5;
+  ext.altitude_valid = false;
+  ext.flarm_id = FlarmId::FromValue(0x123456);
+
+  const auto wire = ext.ToWire();
+  const auto decoded = TrafficExtensions::FromWire(
+    ToBE16(wire.reserved), ToBE32(wire.reserved2));
+  ok1(decoded.track_valid);
+  ok1(decoded.track_deg == 270u);
+  ok1(decoded.aircraft_type == 5u);
+  ok1(!decoded.altitude_valid);
+  ok1(decoded.flarm_id == ext.flarm_id);
+
+  const auto from_ogn = TrafficExtensions::FromOgn(
+    90, true, 1, 0xABCDEFu, true, true);
+  const auto ogn_wire = from_ogn.ToWire();
+  ok1((ogn_wire.reserved & 0x4000u) != 0);
+  ok1((ogn_wire.reserved2 & SkyLinesTracking::FLARM_EXTENSION_VALID) != 0);
+  ok1((ogn_wire.reserved2 & 0xFFFFFFu) == 0xABCDEFu);
+
+  const auto round_trip = TrafficExtensions::FromWire(
+    ToBE16(ogn_wire.reserved), ToBE32(ogn_wire.reserved2));
+  ok1(round_trip.track_valid);
+  ok1(round_trip.track_deg == 90u);
+  ok1(round_trip.aircraft_type == 1u);
+  ok1(round_trip.altitude_valid);
+  ok1(round_trip.flarm_id == FlarmId::FromValue(0xABCDEFu));
+
+  /* Legacy wire: pre-extension servers sent reserved/reserved2 as zero. */
+  const auto legacy = TrafficExtensions::FromWire(0, 0);
+  ok1(legacy.altitude_valid);
+  ok1(!legacy.track_valid);
+  ok1(legacy.aircraft_type == 0u);
+  ok1(!legacy.flarm_id.IsDefined());
+
+  /* Position-only relay: omit extension bits; decode stays compatible. */
+  const auto basic = TrafficExtensions::FromOgn(
+    0, false, 0, 0, false, true).ToWire();
+  ok1(basic.reserved == 0);
+  ok1(basic.reserved2 == 0);
+  ok1(TrafficExtensions::FromWire(0, 0).altitude_valid);
+
+  /* Golden bytes from the original #TrafficRecordExtensions::FromOgn(). */
+  const auto ogn_no_alt = TrafficExtensions::FromOgn(
+    270, true, 5, 0, false, false).ToWire();
+  ok1(ogn_no_alt.reserved == 0x8B0Eu);
+  ok1(ogn_no_alt.reserved2 == 0u);
+  ok1(!TrafficExtensions::FromWire(
+        ToBE16(ogn_no_alt.reserved), 0).altitude_valid);
+
+  ok1(sizeof(SkyLinesTracking::TrafficResponsePacket::Traffic) == 24);
+}
+
 int main()
 {
   const auto data_path = MakeTestDriverDataPath();
   SetSingleDataPath(data_path);
   CreateDataPath();
 
-  plan_tests(1036 /* drivers */ + 29 /* PFLAU extended */
-             + 37 /* PFLAA v7+ */ + 12 /* PFLAE */ + 10 /* PFLAJ */
+  plan_tests(1091 /* drivers */ + 29 /* PFLAU extended */
+             + 37 /* PFLAA v7+ */ + 4 /* PFLAA high speed */
+             + 12 /* PFLAE */ + 10 /* PFLAJ */
              + 16 /* PFLAQ */
              + 109 /* LXNav protocol 1.05 */
              + 8 /* SubSecond */ + 4 /* MWVStatus */
              + 5 /* MWVRelativeTrue */ + 4 /* StallRatio */
              + 12 /* TempHumidityValidity */ + 2 /* ReadGeoAngleNoDot */
              + 13 /* GLL */ + 20 /* GSA */ + 23 /* MalformedInput */
-             + 59 /* Condor3UDP */);
+             + 59 /* Condor3UDP */ + 29 /* FlarmTrafficBuilder */
+             + 24 /* TrafficExtensionsWire */
+             + 42 /* LK8EX1 */);
   TestGeneric();
   TestTasman();
+  TestLK8EX1();
   TestFLARM();
   TestAltairRU();
   TestBlueFly();
@@ -3101,6 +3451,8 @@ int main()
   TestGLL();
   TestGSA();
   TestMalformedInput();
+  TestFlarmTrafficBuilder();
+  TestTrafficExtensionsWire();
 
   DeinitialiseDataPath();
   return exit_status();

@@ -85,10 +85,10 @@ struct DeviceConfig {
     BLE_SENSOR,
 
     /**
-     * Bluetooth Low Energy serial bridge to a paired device (HM-10 or
-     * Nordic UART Service).  Unlike #BLE_SENSOR, this provides a
-     * bidirectional data stream and XCSoar accesses it through the
-     * #Port interface.
+     * Bluetooth Low Energy serial bridge to a paired device (HM-10,
+     * Nordic UART Service, or Microchip/ISSC transparent UART).
+     * Unlike #BLE_SENSOR, this provides a bidirectional data stream
+     * and XCSoar accesses it through the #Port interface.
      *
      * @note The profile stores this mode under the legacy port type string
      * @c ble_hm10 (see Profile/DeviceConfig.cpp).
@@ -104,6 +104,11 @@ struct DeviceConfig {
      * USB serial port on Android.
      */
     ANDROID_USB_SERIAL,
+
+    /**
+     * Poll a Condor 3 Spectate.json file for multiplayer traffic.
+     */
+    SPECTATE_FILE,
   };
 
   /**
@@ -351,6 +356,7 @@ struct DeviceConfig {
     case PortType::PTY:
     case PortType::UDP_LISTENER:
     case PortType::ANDROID_USB_SERIAL:
+    case PortType::SPECTATE_FILE:
       break;
     }
 
@@ -406,6 +412,7 @@ struct DeviceConfig {
     case PortType::PTY:
     case PortType::UDP_LISTENER:
     case PortType::ANDROID_USB_SERIAL:
+    case PortType::SPECTATE_FILE:
       return true;
     }
 
@@ -490,6 +497,17 @@ struct DeviceConfig {
   constexpr bool UsesCalibration() const noexcept {
     return UsesCalibration(port_type);
   }
+
+  /**
+   * Default Condor 3 Spectate.json location on Windows.
+   */
+  static constexpr const char *DEFAULT_SPECTATE_PATH =
+    "c:\\condor3\\logs\\spectate.json";
+
+  /**
+   * Apply default Spectate file path when none is configured.
+   */
+  void ApplySpectateDefaults() noexcept;
 
   void Clear() noexcept;
 

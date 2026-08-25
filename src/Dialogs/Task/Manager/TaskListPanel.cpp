@@ -64,7 +64,7 @@ public:
                 TextWidget &_summary)
     :dialog(_dialog),
      active_task(_active_task), task_modified(_task_modified),
-     more(false),
+     more(true),
      summary(_summary)  {}
 
   void SetTwoWidgets(TwoWidgets &_two_widgets) {
@@ -78,8 +78,9 @@ public:
   void CreateButtons(ButtonPanel &buttons) {
     buttons.Add(_("Load"), [this](){ LoadTask(); });
     buttons.Add(_("Rename"), [this](){ RenameTask(); });
-    buttons.Add(_("Delete"), [this](){ DeleteTask(); });
+    buttons.Add(C_("Button", "Delete"), [this](){ DeleteTask(); });
     more_button = buttons.Add(_("More"), [this](){ OnMoreClicked(); });
+    buttons.EnableCursorSelection();
   }
 
   void RefreshView();

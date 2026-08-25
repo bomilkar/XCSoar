@@ -5,6 +5,7 @@
 #include "NOAADetails.hpp"
 #include "Dialogs/Message.hpp"
 #include "Language/Language.hpp"
+#include "Language/FormatText.hpp"
 #include "Weather/Features.hpp"
 
 #ifdef HAVE_NOAA
@@ -95,7 +96,7 @@ void
 NOAAListWidget::CreateButtons(ButtonPanel &buttons)
 {
   details_button = buttons.Add(_("Details"), [this](){ DetailsClicked(); });
-  add_button = buttons.Add(_("Add"), [this](){ AddClicked(); });
+  add_button = buttons.Add(C_("Button", "Add"), [this](){ AddClicked(); });
   update_button = buttons.Add(_("Update"), [this](){ UpdateClicked(); });
   remove_button = buttons.Add(_("Remove"), [this](){ RemoveClicked(); });
 
@@ -129,7 +130,7 @@ NOAAListWidget::UpdateList()
   std::sort(stations.begin(), stations.end());
 
   ListControl &list = GetList();
-  list.SetLength(stations.size());
+  list.SetLength(std::max(stations.size(), size_t{1}));
   list.Invalidate();
 
   const bool empty = stations.empty(), full = stations.full();
@@ -143,6 +144,14 @@ void
 NOAAListWidget::OnPaintItem(Canvas &canvas, const PixelRect rc,
                             unsigned index) noexcept
 {
+  if (stations.empty()) {
+    assert(index == 0);
+    row_renderer.DrawFirstRow(canvas, rc, _("None"));
+    row_renderer.DrawSecondRow(canvas, rc,
+                               _("Press here to add a station"));
+    return;
+  }
+
   assert(index < stations.size());
 
   NOAAListRenderer::Draw(canvas, rc, *stations[index].iterator,
@@ -208,8 +217,7 @@ NOAAListWidget::RemoveClicked()
   assert(index < stations.size());
 
   StaticString<256> tmp;
-  tmp.Format(_("Do you want to remove station %s?"),
-             stations[index].code.c_str());
+  FormatRemoveStationPrompt(tmp, stations[index].code.c_str());
 
   if (ShowMessageBox(tmp, _("Remove"), MB_YESNO) == IDNO)
     return;
@@ -238,6 +246,12 @@ NOAAListWidget::DetailsClicked()
 void
 NOAAListWidget::OnActivateItem(unsigned index) noexcept
 {
+  if (stations.empty()) {
+    assert(index == 0);
+    AddClicked();
+    return;
+  }
+
   OpenDetails(index);
 }
 

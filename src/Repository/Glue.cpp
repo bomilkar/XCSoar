@@ -2,18 +2,23 @@
 // Copyright The XCSoar Project
 
 #include "DataFilePath.hpp"
+#include "FileType.hpp"
+#include "FileRepository.hpp"
 #include "Glue.hpp"
 #include "Parser.hpp"
+#include "LocalPath.hpp"
+#include "Profile/Keys.hpp"
+#include "Profile/Profile.hpp"
+#include "Weather/Rasp/RaspStore.hpp"
 #include "net/http/Features.hpp"
 #include "net/http/DownloadManager.hpp"
 #include "system/Path.hpp"
 #include "system/FileUtil.hpp"
 #include "io/FileLineReader.hpp"
+#include "time/BrokenDateTime.hpp"
 
 #include "util/StringFormat.hpp"
 #include "util/StringCompare.hxx"
-#include "Profile/Keys.hpp"
-#include "Profile/Profile.hpp"
 #include "util/IterableSplitString.hxx"
 
 #ifdef HAVE_DOWNLOAD_MANAGER
@@ -31,6 +36,7 @@ static constexpr std::string_view USER_REPOSITORY_FILE_PREFIX{
     "user_repository_"};
 
 static bool repository_downloaded = false;
+static bool user_repository_downloaded = false;
 
 std::vector<RepositoryLink>
 GetUserRepositories()
@@ -129,14 +135,148 @@ EnqueueRepositoryDownload(bool force, bool main_repo, bool user_repo)
 
   // Enqueue additional user-defined repository URIs, if set
   if (user_repo) {
-    for (const auto &repo : GetUserRepositories())
-      {
-        const auto path =
-          RepositoryDownloadRelativePath(repo.filename.c_str());
-        Net::DownloadManager::Enqueue(repo.uri.c_str(), Path(path.c_str()));
-      }
+    if (!user_repository_downloaded || force) {
+      user_repository_downloaded = true;
+      for (const auto &repo : GetUserRepositories())
+        {
+          const auto path =
+            RepositoryDownloadRelativePath(repo.filename.c_str());
+          Net::DownloadManager::Enqueue(repo.uri.c_str(), Path(path.c_str()));
+        }
+    }
   }
 }
+
+#ifdef HAVE_DOWNLOAD_MANAGER
+
+AllocatedPath
+GetFileDownloadRelativePath(const AvailableFile &file) noexcept
+{
+  const auto base = file.GetName();
+  if (base == nullptr || *base == '\0')
+    return nullptr;
+
+  const AllocatedPath subdir = GetFileTypeDefaultDir(file.type);
+  if (subdir == nullptr)
+    return AllocatedPath(base);
+
+  return AllocatedPath::Build(subdir, Path(base));
+}
+
+bool
+IsRemoteFileOutOfDate(const AvailableFile &file) noexcept
+{
+  const auto path = LocalPath(GetFileDownloadRelativePath(file));
+  if (path == nullptr)
+    return false;
+
+  if (!File::Exists(path))
+    return true;
+
+  const BrokenDate local_changed =
+    BrokenDateTime{File::GetLastModification(path)};
+  return local_changed < file.update_date;
+}
+
+void
+EnqueueRemoteFileDownload(const AvailableFile &file) noexcept
+{
+  if (!Net::DownloadManager::IsAvailable())
+    return;
+
+  const auto relative_path = GetFileDownloadRelativePath(file);
+  if (relative_path == nullptr)
+    return;
+
+  const AllocatedPath subdir = GetFileTypeDefaultDir(file.type);
+  if (subdir != nullptr) {
+    const auto dest_path = LocalPath(subdir);
+    Directory::CreateRecursive(dest_path);
+    if (!Directory::Exists(dest_path))
+      return;
+  }
+
+  Net::DownloadManager::Enqueue(file.GetURI(), Path(relative_path.c_str()));
+}
+
+AllocatedPath
+GetConfiguredRaspFileName() noexcept
+{
+  auto path = Profile::GetPath(ProfileKeys::RaspFile);
+  if (path == nullptr)
+    path = ResolveTypedDataFilePath(FileType::RASP, RASP_FILENAME);
+  if (path == nullptr)
+    return nullptr;
+
+  const Path base = path.GetBase();
+  if (base == nullptr || base.empty())
+    return nullptr;
+
+  return AllocatedPath(base.c_str());
+}
+
+const AvailableFile *
+FindConfiguredRaspRemoteFile(const FileRepository &repository) noexcept
+{
+  const auto name = GetConfiguredRaspFileName();
+  if (name == nullptr)
+    return nullptr;
+
+  return repository.FindByName(name.c_str());
+}
+
+/**
+ * RASP forecasts are regenerated every day, but the repository
+ * "update=" field is the static publication date of the product for
+ * some providers (the ThermalMap entry has been frozen since 2023), so
+ * IsRemoteFileOutOfDate() would never ask for a fresh forecast.  Treat
+ * the local copy as out of date when it is missing or was last written
+ * before today, which downloads at most once per calendar day.
+ */
+static bool
+IsRaspFileOutOfDate(const AvailableFile &file) noexcept
+{
+  const auto path = LocalPath(GetFileDownloadRelativePath(file));
+  if (path == nullptr)
+    return false;
+
+  if (!File::Exists(path))
+    return true;
+
+  const BrokenDate modified =
+    BrokenDateTime{File::GetLastModification(path)};
+  if (!modified.IsPlausible())
+    return true;
+
+  /* the system clock, not GPS time: this also runs at startup, before
+     a fix is available */
+  const BrokenDate today = BrokenDateTime::NowUTC();
+  return modified < today || modified < file.update_date;
+}
+
+bool
+EnqueueConfiguredRaspUpdate(const FileRepository &repository) noexcept
+{
+  const AvailableFile *remote = FindConfiguredRaspRemoteFile(repository);
+  if (remote == nullptr || !IsRaspFileOutOfDate(*remote))
+    return false;
+
+  EnqueueRemoteFileDownload(*remote);
+  return true;
+}
+
+bool
+EnqueueConfiguredRaspDownload(const FileRepository &repository) noexcept
+{
+  const AvailableFile *remote = FindConfiguredRaspRemoteFile(repository);
+  if (remote == nullptr)
+    return false;
+
+  EnqueueRemoteFileDownload(*remote);
+  return true;
+}
+
+#endif /* HAVE_DOWNLOAD_MANAGER */
 
 #ifdef HAVE_DOWNLOAD_MANAGER
 
@@ -156,6 +296,7 @@ DownloadRepositoriesModal(bool main_repo, bool user_repo)
   }
 
   if (user_repo) {
+    bool user_repo_download_success = true;
     for (const auto &repo : GetUserRepositories()) {
       try {
         const auto path =
@@ -164,10 +305,20 @@ DownloadRepositoriesModal(bool main_repo, bool user_repo)
                               repo.uri.c_str(), path.c_str()) == nullptr)
           return; /* cancelled */
       } catch (...) {
+        user_repo_download_success = false;
         ShowError(std::current_exception(), _("Updating repository"));
       }
     }
+    if (user_repo_download_success)
+      user_repository_downloaded = true;
   }
+}
+
+bool
+FileTypeSupportsDownload(FileType type) noexcept
+{
+  return type != FileType::IGC && type != FileType::UNKNOWN &&
+         Net::DownloadManager::IsAvailable();
 }
 
 #endif

@@ -40,6 +40,7 @@ DIALOG_SOURCES = \
 	$(SRC)/Dialogs/Device/ManageFlarmDialog.cpp \
 	$(SRC)/Dialogs/Device/BlueFly/BlueFlyConfigurationDialog.cpp \
 	$(SRC)/Dialogs/Device/Stratux/ConfigurationDialog.cpp \
+	$(SRC)/Dialogs/Device/GDL90/ConfigurationDialog.cpp \
 	$(SRC)/Dialogs/Device/ManageI2CPitotDialog.cpp \
 	$(SRC)/Dialogs/Device/LX/ManageLXNAVVarioDialog.cpp \
 	$(SRC)/Dialogs/Device/LX/LXNAVVarioConfigWidget.cpp \
@@ -83,6 +84,7 @@ DIALOG_SOURCES = \
 	$(SRC)/Dialogs/DataField.cpp \
 	$(SRC)/Dialogs/ComboPicker.cpp \
 	$(SRC)/Dialogs/FilePicker.cpp \
+	$(SRC)/Dialogs/EmptyDownloadList.cpp \
 	$(SRC)/Dialogs/MultiFilePicker.cpp \
 	$(SRC)/Dialogs/HelpDialog.cpp \
 	$(SRC)/Dialogs/WifiDialog.cpp \
@@ -107,6 +109,7 @@ DIALOG_SOURCES = \
 	$(SRC)/Dialogs/Waypoint/Manager.cpp \
 	$(SRC)/Dialogs/Waypoint/dlgWaypointEdit.cpp \
 	$(SRC)/Dialogs/Waypoint/WaypointList.cpp \
+	$(SRC)/Dialogs/Waypoint/GetWaypointReachability.cpp \
 	$(SRC)/Dialogs/Waypoint/NearestWaypoint.cpp \
 	\
 	$(SRC)/Dialogs/Settings/Panels/AirspaceConfigPanel.cpp \
@@ -123,6 +126,8 @@ DIALOG_SOURCES = \
 	$(SRC)/Dialogs/Settings/Panels/MapDisplayConfigPanel.cpp \
 	$(SRC)/Dialogs/Settings/Panels/NetworkConfigPanel.cpp \
 	$(SRC)/Dialogs/Settings/Panels/PagesConfigPanel.cpp \
+	$(SRC)/Dialogs/Settings/Panels/RaspConfigPanel.cpp \
+	$(if $(filter y,$(HAVE_HTTP)),$(SRC)/Dialogs/Settings/Panels/SkySightConfigPanel.cpp) \
 	$(SRC)/Dialogs/Settings/Panels/RouteConfigPanel.cpp \
 	$(SRC)/Dialogs/Settings/Panels/SafetyFactorsConfigPanel.cpp \
 	$(SRC)/Dialogs/Settings/Panels/SiteConfigPanel.cpp \
@@ -135,6 +140,8 @@ DIALOG_SOURCES = \
 	$(SRC)/Dialogs/Settings/Panels/TimeConfigPanel.cpp \
 	$(SRC)/Dialogs/Settings/Panels/WaypointDisplayConfigPanel.cpp \
 	$(SRC)/Dialogs/Settings/Panels/WeatherConfigPanel.cpp \
+	$(if $(filter y,$(HAVE_HTTP)),$(SRC)/Dialogs/Settings/Panels/PCMetConfigPanel.cpp) \
+	$(if $(filter y,$(HAVE_HTTP)),$(SRC)/Dialogs/Settings/Panels/XCThermConfigPanel.cpp) \
 	$(SRC)/Dialogs/Settings/Panels/WeGlideConfigPanel.cpp \
 	\
 	$(SRC)/Dialogs/Task/Widgets/ObservationZoneEditWidget.cpp \
@@ -166,6 +173,7 @@ DIALOG_SOURCES = \
 	$(SRC)/Dialogs/DateEntry.cpp \
 	$(SRC)/Dialogs/GeoPointEntry.cpp \
 	$(SRC)/Dialogs/Weather/WeatherDialog.cpp \
+	$(SRC)/Dialogs/Weather/WeatherOverlayDraft.cpp \
 	$(SRC)/Dialogs/Weather/RASPDialog.cpp \
 	$(SRC)/Dialogs/dlgCredits.cpp \
 	$(SRC)/Dialogs/dlgQuickGuide.cpp \
@@ -180,9 +188,16 @@ endif
 
 ifeq ($(HAVE_HTTP),y)
 DIALOG_SOURCES += \
+	$(SRC)/Dialogs/Weather/XCThermDialog.cpp \
+	$(SRC)/Dialogs/Weather/WeatherCredentialGateWidget.cpp \
 	$(SRC)/Dialogs/Weather/PCMetDialog.cpp \
 	$(SRC)/Dialogs/Weather/NOAAList.cpp \
 	$(SRC)/Dialogs/Weather/NOAADetails.cpp
+endif
+
+ifeq ($(HAVE_HTTP),y)
+DIALOG_SOURCES += \
+	$(SRC)/Dialogs/Weather/SkySightDialog.cpp
 endif
 
 XCSOAR_SOURCES := \
@@ -338,6 +353,7 @@ XCSOAR_SOURCES := \
 	$(SRC)/Input/InputParser.cpp \
 	$(SRC)/Input/TaskEventObserver.cpp \
 	$(SRC)/PageSettings.cpp \
+	$(SRC)/PageOverlayTitle.cpp \
 	$(SRC)/PageState.cpp \
 	$(SRC)/PageActions.cpp \
 	$(SRC)/StatusMessage.cpp \
@@ -363,6 +379,7 @@ XCSOAR_SOURCES := \
 	$(SRC)/Renderer/AirspaceLabelRenderer.cpp \
 	$(SRC)/Renderer/AirspaceListRenderer.cpp \
 	$(SRC)/Renderer/AirspacePreviewRenderer.cpp \
+	$(SRC)/Renderer/AirspaceWarningStatusRenderer.cpp \
 	$(SRC)/Renderer/BestCruiseArrowRenderer.cpp \
 	$(SRC)/Renderer/CompassRenderer.cpp \
 	$(SRC)/Renderer/FinalGlideBarRenderer.cpp \
@@ -390,15 +407,30 @@ XCSOAR_SOURCES := \
 	$(SRC)/Weather/Rasp/RaspStore.cpp \
 	$(SRC)/Weather/Rasp/RaspCache.cpp \
 	$(SRC)/Weather/Rasp/RaspRenderer.cpp \
+	$(SRC)/Weather/Rasp/ColorMap.cpp \
 	$(SRC)/Weather/Rasp/RaspStyle.cpp \
+	$(SRC)/Weather/Rasp/RaspStylesData.cpp \
 	$(SRC)/Weather/Rasp/FieldControls.cpp \
 	$(SRC)/Weather/Rasp/Configured.cpp \
+	$(SRC)/Weather/Rasp/DownloadGlue.cpp \
+	$(SRC)/Weather/MapOverlay/CursorBarLabels.cpp \
+	$(SRC)/Weather/MapOverlay/InputEvents.cpp \
+	$(SRC)/Weather/MapOverlay/ControlsFactory.cpp \
+	$(SRC)/Weather/MapOverlay/ControlsWidget.cpp \
+	$(SRC)/Weather/MapOverlay/TimePicker.cpp \
+	$(SRC)/Weather/MapOverlay/WeatherSetupDialog.cpp \
+	$(SRC)/Weather/MapOverlay/RaspControlsModel.cpp \
+	$(SRC)/Weather/MapOverlay/XcthermControlsModel.cpp \
+	$(if $(filter y,$(HAVE_HTTP)),$(SRC)/Weather/MapOverlay/SkySightControlsModel.cpp) \
+	$(if $(filter y,$(HAVE_HTTP)),$(SRC)/Weather/SkySight/FieldControls.cpp) \
+	$(SRC)/Weather/BackgroundDownloadProgress.cpp \
 	\
 	$(SRC)/Blackboard/BlackboardListener.cpp \
 	$(SRC)/Blackboard/ProxyBlackboardListener.cpp \
 	$(SRC)/Blackboard/RateLimitedBlackboardListener.cpp \
 	$(SRC)/Blackboard/LiveBlackboard.cpp \
 	$(SRC)/Blackboard/InterfaceBlackboard.cpp \
+	$(SRC)/Blackboard/BlackboardListenerRegistration.cpp \
 	$(SRC)/Blackboard/ScopeGPSListener.cpp \
 	$(SRC)/Blackboard/ScopeCalculatedListener.cpp \
 	\
@@ -602,13 +634,25 @@ ifeq ($(OPENGL),y)
 ifeq ($(HAVE_HTTP),y)
 XCSOAR_SOURCES += \
 	$(SRC)/Dialogs/Weather/MapOverlayWidget.cpp \
-	$(SRC)/Dialogs/Weather/MapOverlayControlsWidget.cpp
+	$(SRC)/Dialogs/Weather/EdlSettingsWidget.cpp
 endif
+endif
+
+ifeq ($(HAVE_HTTP),y)
+XCSOAR_SOURCES += \
+	$(SRC)/Weather/SkySight/SkySightFileDecoder.cpp \
+	$(SRC)/Weather/SkySight/SkySightClient.cpp \
+	$(SRC)/Weather/SkySight/SkySightCache.cpp \
+	$(SRC)/Weather/SkySight/SkySightAPI.cpp \
+	$(SRC)/Weather/SkySight/SkySightRequest.cpp
+
+$(call SRC_TO_OBJ,$(SRC)/Weather/SkySight/SkySightFileDecoder.cpp): CPPFLAGS += $(NETCDF_CPPFLAGS)
 endif
 
 ifeq ($(TARGET_IS_DARWIN),y)
 XCSOAR_SOURCES += \
 	$(SRC)/Apple/Services.cpp \
+	$(SRC)/Apple/BackgroundSave.cpp \
 	$(SRC)/Apple/SoundUtil.cpp \
 	$(SRC)/Apple/PathProvider.cpp \
 	$(SRC)/Apple/InternalSensors.cpp \
@@ -691,7 +735,19 @@ XCSOAR_SOURCES += \
 	$(SRC)/Weather/NOAAFormatter.cpp \
 	$(SRC)/Weather/NOAADownloader.cpp \
 	$(SRC)/Weather/NOAAStore.cpp \
-	$(SRC)/Weather/NOAAUpdater.cpp
+	$(SRC)/Weather/NOAAUpdater.cpp \
+	$(SRC)/Weather/xctherm/XCThermAPI.cpp \
+	$(SRC)/Weather/xctherm/XCThermDownload.cpp \
+	$(SRC)/Weather/xctherm/XCThermDownloadGlue.cpp \
+	$(SRC)/Weather/xctherm/XCThermGeoJSON.cpp \
+	$(SRC)/Weather/xctherm/XCThermGeoQuery.cpp \
+	$(SRC)/Weather/xctherm/XCThermGeoJSONOverlay.cpp \
+	$(SRC)/Weather/xctherm/XCThermMapOverlay.cpp \
+	$(SRC)/Weather/xctherm/XCThermCatalog.cpp \
+	$(SRC)/Weather/xctherm/XCThermForecastTime.cpp \
+	$(SRC)/Weather/xctherm/FieldControls.cpp \
+	$(SRC)/Weather/xctherm/XCThermControlsModel.cpp \
+	$(SRC)/Weather/xctherm/XCThermAutoSwitch.cpp \
 
 XCSOAR_SOURCES += \
 	$(SRC)/Dialogs/Settings/Panels/TrackingConfigPanel.cpp \
@@ -708,6 +764,7 @@ XCSOAR_SOURCES += \
 	$(SRC)/Tracking/SkyLines/Assemble.cpp \
 	$(SRC)/Tracking/SkyLines/Key.cpp \
 	$(SRC)/Tracking/SkyLines/Glue.cpp \
+	$(SRC)/Tracking/SkyLines/FlarmTrafficBuilder.cpp \
 	$(SRC)/Tracking/TrackingGlue.cpp \
 	$(SRC)/NetComponents.cpp
 
@@ -715,9 +772,11 @@ ifeq ($(OPENGL),y)
 XCSOAR_SOURCES += \
 	$(SRC)/Weather/EDL/Levels.cpp \
 	$(SRC)/Weather/EDL/TileStore.cpp \
+	$(SRC)/Weather/EDL/TileValue.cpp \
+	$(SRC)/Weather/EDL/EdlMbTilesOverlay.cpp \
 	$(SRC)/Weather/EDL/StateController.cpp \
+	$(SRC)/Weather/EDL/FieldControls.cpp \
 	$(SRC)/Weather/MapOverlay/EdlControlsModel.cpp \
-	$(SRC)/Weather/MapOverlay/RaspControlsModel.cpp \
 	$(SRC)/Weather/EDL/Glue.cpp \
 	$(SRC)/Weather/EDL/DownloadGlue.cpp
 endif
@@ -772,6 +831,10 @@ endif
 
 ifeq ($(TARGET_IS_DARWIN),y)
 XCSOAR_LDLIBS += -framework CoreLocation -lSDL2main # include SDL2main for main() on MacOS and iOS (otherwise linking fails)
+endif
+
+ifeq ($(HAVE_HTTP),y)
+XCSOAR_LDLIBS += $(NETCDF_LDLIBS)
 endif
 
 XCSOAR_STRIP = y

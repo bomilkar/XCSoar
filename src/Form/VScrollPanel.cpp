@@ -6,6 +6,7 @@
 #include "ui/canvas/Canvas.hpp"
 #include "ui/event/KeyCode.hpp"
 #include "Asset.hpp"
+#include "Hardware/CPU.hpp"
 #include "Screen/Layout.hpp"
 #include "Math/Point2D.hpp"
 #include "util/StringAPI.hxx"
@@ -59,6 +60,17 @@ VScrollPanel::GetScrollStep() const noexcept
   return step > 0 ? step : 1;
 }
 
+/**
+ * Can the user scroll with pixel precision?  Fast displays get
+ * kinetic/smooth scrolling; e-paper and slow CPUs snap (same gate as
+ * map pan animations in InputEventsMap).
+ */
+static bool
+UsePixelPan() noexcept
+{
+  return !HasEPaper() && !IsSlowCPU();
+}
+
 void
 VScrollPanel::ScrollBy(int delta) noexcept
 {
@@ -95,7 +107,17 @@ VScrollPanel::SmoothScrollTo(int target) noexcept
   const int max_origin = std::max(0, static_cast<int>(virtual_height) -
                                      static_cast<int>(physical_height));
 
-  smooth_scroll_target = std::clamp(target, 0, max_origin);
+  target = std::clamp(target, 0, max_origin);
+
+  /* E-paper cannot keep up with ~60 Hz scroll animation; snap. */
+  if (!UsePixelPan()) {
+    smooth_scroll_timer.Cancel();
+    smooth_scroll_target = -1;
+    SetOriginClamped(target);
+    return;
+  }
+
+  smooth_scroll_target = target;
 
   // Start animation at ~60fps
   smooth_scroll_timer.Schedule(std::chrono::milliseconds(16));
@@ -122,11 +144,6 @@ VScrollPanel::OnSmoothScrollTimer() noexcept
     const int step = diff / 3;
     SetOriginClamped(static_cast<int>(origin) + (step != 0 ? step : (diff > 0 ? 1 : -1)));
   }
-}
-
-static bool UsePixelPan() noexcept
-{
-  return !HasEPaper();
 }
 
 void

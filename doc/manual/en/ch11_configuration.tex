@@ -311,8 +311,19 @@ changed terrain settings are directly visible at the small preview below.
   the wind direction, with upwind slopes bright, and downwind slopes shaded.
 \item[Terrain contrast*]  Defines the amount of Phong shading in the terrain rendering. 
   Use large values to emphasise terrain slope, smaller values if flying in steep mountains.
-\item[Terrain brightness*]  Defines the brightness (whiteness) of the terrain rendering. 
+\item[Terrain brightness*]  Defines the brightness (whiteness) of the terrain rendering.
   This controls the average illumination of the terrain.
+\item[Contours*]  Draws contour lines on the terrain.  Two groups of
+  modes are available.
+  The adaptive modes ({\bf Mountains}, {\bf Highlands}, {\bf Lowlands},
+  {\bf Superfine}) set a base line density that is automatically scaled
+  with the zoom level to avoid over-cluttering at small scales.
+  {\bf Mountains} is for areas with steep slopes, with a 256\,m base
+  spacing; the other adaptive modes provide progressively smaller
+  spacing and higher line density.
+  The fixed modes ({\bf Fixed 256\,m}, {\bf Fixed 128\,m},
+  {\bf Fixed 64\,m}) use a constant contour spacing regardless of zoom
+  level.
 \end{description}
 
 
@@ -784,14 +795,18 @@ When editing a page, the following options are available for map pages:
   or \emph{Map (north-up)}.
 \item[InfoBoxes]  Which InfoBox set is shown alongside the main area.
 \item[Bottom area]  Optional panel below the main area.  Select
-  \emph{Weather controls} to show in-flight RASP or EDL forecast controls
-  when the page uses a weather overlay.
+  \emph{Weather controls} to show in-flight RASP, EDL, or XC Therm forecast
+  controls when the page uses a weather overlay.
 \item[Map overlay]  Optional weather overlay drawn on map pages: \emph{None},
-  \emph{RASP}, or \emph{EDL}.  RASP requires a loaded RASP file; EDL
-  requires \emph{EDL Weather Page} to be enabled in the weather system
-  configuration.
-\item[RASP layer]  When \emph{Map overlay} is \emph{RASP}, selects which
-  RASP field is displayed on this page.
+  \emph{RASP}, \emph{EDL}, or \emph{XC Therm}.  RASP requires a loaded RASP
+  file; EDL and XC Therm require network-capable builds with the respective
+  weather provider configured.
+\item[Layer / Level]  When \emph{Map overlay} is \emph{RASP}, selects
+  which RASP field is displayed on this page.  When the overlay is
+  \emph{EDL}, selects the pressure level (altitude band): \emph{Auto}
+  follows aircraft altitude when the page is opened; a fixed level is
+  restored each time the page is selected.  The label and choices
+  change with the selected overlay.
 \end{description}
 
 
@@ -997,9 +1012,10 @@ for every glide performance relevant computation of XCSoar.
   In the absence of a configurable pilot weight XCSoar expects you to include your own weight
   to the dry mass.
 \item[Wing area]  Optional specification of the wing area of the glider type.
-\item[V rough air] Optionally the maximum manoeuvring speed can
-  be entered on this page to prevent the glide computer from commanding 
-  unrealistic cruise speeds.
+\item[Max.\ Cruise Speed] Optional upper limit for MacCready speed-to-fly
+  (including final glide).  Prevents the glide computer from commanding
+  unrealistically high cruise speeds.  A typical choice is the rough-air
+  / green-arc limit from the flight manual.
 \item[Handicap]  The handicap factor used for the On-Line Contest scoring.
 \item[Max.\ ballast]  Optional the amount of water ballast XCSoar refers to as 100\% ballast.
   Set to zero if it does not apply.

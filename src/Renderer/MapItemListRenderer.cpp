@@ -9,17 +9,21 @@
 #include "MapWindow/Items/RaspMapItem.hpp"
 #include "Look/DialogLook.hpp"
 #include "Look/MapLook.hpp"
-#include "Renderer/AircraftRenderer.hpp"
 #include "Renderer/AirspaceListRenderer.hpp"
 #include "Renderer/WaypointListRenderer.hpp"
 #include "Engine/Waypoint/Waypoint.hpp"
 #include "Formatter/UserUnits.hpp"
+#include "Units/Units.hpp"
+#include "Units/System.hpp"
+#include "Units/Descriptor.hpp"
+#include "Units/Unit.hpp"
 #include "Formatter/UserGeoPointFormatter.hpp"
 #include "Formatter/TimeFormatter.hpp"
 #include "Formatter/LocalTimeFormatter.hpp"
 #include "Formatter/AngleFormatter.hpp"
 #include "Dialogs/Task/dlgTaskHelpers.hpp"
 #include "Renderer/OZPreviewRenderer.hpp"
+#include "Renderer/AircraftRenderer.hpp"
 #include "Language/Language.hpp"
 #include "util/StringCompare.hxx"
 #include "util/Macros.hpp"
@@ -38,6 +42,13 @@
 
 #ifdef HAVE_NOAA
 #include "Renderer/NOAAListRenderer.hpp"
+#endif
+
+#ifdef HAVE_SKYLINES_TRACKING
+#include "Components.hpp"
+#include "NetComponents.hpp"
+#include "Tracking/TrackingGlue.hpp"
+#include "Tracking/SkyLines/TrafficDisplay.hpp"
 #endif
 
 using namespace std::chrono;
@@ -188,16 +199,24 @@ static void
 Draw(Canvas &canvas, PixelRect rc,
      const SelfMapItem &item,
      const TwoTextRowsRenderer &row_renderer,
-     const AircraftLook &look,
-     const MapSettings &settings)
+     const AircraftLook &look)
 {
   const unsigned line_height = rc.GetHeight();
   const unsigned text_padding = Layout::GetTextPadding();
+  if (line_height > 2 * text_padding) {
+    const unsigned icon_size = line_height - 2 * text_padding;
 
-  const PixelPoint pt(rc.left + line_height / 2, rc.top + line_height / 2);
-  AircraftRenderer::Draw(canvas, settings, look, item.bearing, pt);
+    const PixelPoint pt(rc.left + icon_size / 2, rc.top + line_height / 2);
 
-  rc.left += line_height + text_padding;
+    /* Wingspan of AircraftSmall is ~28 in +/-50 PolygonRotateShift units. */
+    constexpr unsigned aircraft_span = 28;
+    const int aircraft_scale =
+      std::max(int(icon_size) * 50 / int(aircraft_span), 1);
+    AircraftRenderer::DrawSimple(canvas, look, item.bearing, pt,
+                                 aircraft_scale);
+
+    rc.left += icon_size + text_padding;
+  }
 
   row_renderer.DrawFirstRow(canvas, rc, _("Your Position"));
   row_renderer.DrawSecondRow(canvas, rc, FormatGeoPoint(item.location));
@@ -222,7 +241,8 @@ Draw(Canvas &canvas, const PixelRect rc,
      const WaypointRendererSettings &renderer_settings)
 {
   WaypointListRenderer::Draw(canvas, rc, *item.waypoint,
-                             row_renderer, look, renderer_settings);
+                             row_renderer, look, renderer_settings,
+                             item.reachable);
 }
 
 #ifdef HAVE_NOAA
@@ -315,112 +335,104 @@ Draw(Canvas &canvas, PixelRect rc,
 {
   const unsigned line_height = rc.GetHeight();
   const unsigned text_padding = Layout::GetTextPadding();
+  const unsigned icon_padding = 2 * text_padding;
+  if (line_height <= icon_padding)
+    return;
+
+  const unsigned icon_size = line_height - icon_padding;
 
   const FlarmTraffic *traffic = traffic_list == nullptr
     ? nullptr
     : traffic_list->FindTraffic(item.id);
 
-  const PixelPoint pt(rc.left + line_height / 2, rc.top + line_height / 2);
+  const PixelPoint pt(rc.left + icon_size / 2, rc.top + line_height / 2);
 
   // Render the representation of the traffic icon
   if (traffic != nullptr)
-    TrafficRenderer::Draw(canvas, traffic_look, false,
-                          *traffic, traffic->track,
-                          item.color, pt);
+    TrafficRenderer::DrawList(canvas, traffic_look,
+                              *traffic, traffic->track,
+                              item.color, pt, icon_size);
 
-  rc.left += line_height + text_padding;
-
-  // Now render the text information
-  const ResolvedInfo info = FlarmDetails::ResolveInfo(item.id);
+  rc.left += icon_size + text_padding;
 
   StaticString<256> title_string;
-  if (!info.pilot.empty())
-    title_string = info.pilot.c_str();
-  else
-    title_string = _("FLARM Traffic");
-
-  // Append name to the title, if it exists
-  if (!info.callsign.empty()) {
-    title_string.append(", ");
-    title_string.append(info.callsign.c_str());
-  }
-
-  row_renderer.DrawFirstRow(canvas, rc, title_string);
-
   StaticString<256> info_string;
-  if (!info.plane_type.empty())
-    info_string = info.plane_type.c_str();
-  else if (traffic != nullptr)
-    info_string = FlarmTraffic::GetTypeString(traffic->type);
-  else
-    info_string = _("Unknown");
 
-  // Generate the line of info about the target, if it's available
-  if (traffic != nullptr) {
-    if (traffic->source != FlarmTraffic::SourceType::FLARM)
-      info_string.AppendFormat(" [%s]",
-                               FlarmTraffic::GetSourceString(traffic->source));
+#ifdef HAVE_SKYLINES_TRACKING
+  if (traffic != nullptr &&
+      FlarmTraffic::IsInjectedSource(traffic->source)) {
+    StaticString<64> title;
+    uint32_t pilot_id = 0;
+    StaticString<64> server_name;
+    if (net_components != nullptr && net_components->tracking != nullptr) {
+      pilot_id = net_components->tracking->GetOnlinePilotId(item.id);
+      net_components->tracking->CopyOnlineUserName(pilot_id, server_name);
+    }
+    SkyLinesTracking::FormatTrafficTitle(title, pilot_id, item.id,
+                                         server_name.empty()
+                                         ? nullptr
+                                         : server_name.c_str(),
+                                         traffic->HasName()
+                                         ? traffic->name.c_str()
+                                         : nullptr);
+    title_string = title.c_str();
 
-    if (traffic->altitude_available)
+    info_string = FlarmTraffic::GetSourceString(traffic->source);
+    if (traffic->altitude_available) {
       info_string.AppendFormat(", %s: %s", _("Altitude"),
                                FormatUserAltitude(traffic->altitude).c_str());
+    }
 
     if (traffic->climb_rate_avg30s_available) {
       info_string.AppendFormat(", %s: %s", _("Vario"),
                                FormatUserVerticalSpeed(traffic->climb_rate_avg30s).c_str());
     }
+  } else
+#endif
+  {
+    const ResolvedInfo info = FlarmDetails::ResolveInfo(item.id);
+
+    if (!info.callsign.empty())
+      title_string = info.callsign.c_str();
+    else if (!info.pilot.empty())
+      title_string = info.pilot.c_str();
+    else if (traffic != nullptr && traffic->HasName())
+      title_string = traffic->name.c_str();
+    else
+      title_string = _("Traffic");
+
+    if (!info.registration.empty() &&
+        !title_string.equals(info.registration.c_str())) {
+      title_string.append(", ");
+      title_string.append(info.registration.c_str());
+    }
+
+    if (!info.plane_type.empty())
+      info_string = info.plane_type.c_str();
+    else if (traffic != nullptr)
+      info_string = FlarmTraffic::GetTypeString(traffic->type);
+    else
+      info_string = _("Unknown");
+
+    if (traffic != nullptr) {
+      if (traffic->source != FlarmTraffic::SourceType::FLARM)
+        info_string.AppendFormat(" [%s]",
+                                 FlarmTraffic::GetSourceString(traffic->source));
+
+      if (traffic->altitude_available)
+        info_string.AppendFormat(", %s: %s", _("Altitude"),
+                                 FormatUserAltitude(traffic->altitude).c_str());
+
+      if (traffic->climb_rate_avg30s_available) {
+        info_string.AppendFormat(", %s: %s", _("Vario"),
+                                 FormatUserVerticalSpeed(traffic->climb_rate_avg30s).c_str());
+      }
+    }
   }
 
+  row_renderer.DrawFirstRow(canvas, rc, title_string);
   row_renderer.DrawSecondRow(canvas, rc, info_string);
 }
-
-#ifdef HAVE_SKYLINES_TRACKING
-
-/**
- * Calculate how many minutes have passed since #past_ms.
- */
-[[gnu::const]]
-static constexpr auto
-SinceInMinutes(TimeStamp now,
-               duration<uint32_t, milliseconds::period> past_ms) noexcept
-{
-  using Minutes = duration<unsigned, minutes::period>;
-  constexpr Minutes ONE_DAY = hours{24};
-  auto now_minutes = now.Cast<Minutes>() % ONE_DAY;
-  auto past_minutes = duration_cast<Minutes>(past_ms) % ONE_DAY;
-
-  if (past_minutes >= hours{20} && now_minutes < hours{4})
-    /* midnight rollover */
-    now_minutes += ONE_DAY;
-
-  if (past_minutes > now_minutes)
-    return Minutes{};
-
-  return now_minutes - past_minutes;
-}
-
-#include "Interface.hpp"
-
-static void
-Draw(Canvas &canvas, PixelRect rc,
-     const SkyLinesTrafficMapItem &item,
-     const TwoTextRowsRenderer &row_renderer)
-{
-  rc.right = row_renderer.DrawRightFirstRow(canvas, rc,
-                                            FormatUserAltitude(item.altitude));
-
-  row_renderer.DrawFirstRow(canvas, rc, item.name);
-
-  if (CommonInterface::Basic().time_available) {
-    StaticString<64> buffer;
-    buffer.UnsafeFormat(_("%u minutes ago"),
-                        SinceInMinutes(CommonInterface::Basic().time,
-                                       duration<uint32_t, milliseconds::period>{item.time_of_day}).count());
-    row_renderer.DrawSecondRow(canvas, rc, buffer);
-  }
-}
-
-#endif /* HAVE_SKYLINES_TRACKING */
 
 static void
 Draw(Canvas &canvas, PixelRect rc,
@@ -428,6 +440,8 @@ Draw(Canvas &canvas, PixelRect rc,
      const TwoTextRowsRenderer &row_renderer)
 {
   row_renderer.DrawFirstRow(canvas, rc, item.label.c_str());
+  if (!item.info.empty())
+    row_renderer.DrawSecondRow(canvas, rc, item.info.c_str());
 }
 
 static void
@@ -435,6 +449,10 @@ Draw(Canvas &canvas, PixelRect rc,
      const RaspMapItem &item,
      const TwoTextRowsRenderer &row_renderer)
 {
+  const auto value = FormatRaspValue(item.value);
+  if (!value.empty())
+    rc.right = row_renderer.DrawRightFirstRow(canvas, rc, value);
+
   row_renderer.DrawFirstRow(canvas, rc, item.label.c_str());
 }
 
@@ -453,7 +471,7 @@ MapItemListRenderer::Draw(Canvas &canvas, const PixelRect rc,
     break;
   case MapItem::Type::SELF:
     ::Draw(canvas, rc, (const SelfMapItem &)item,
-           row_renderer, look.aircraft, settings);
+           row_renderer, look.aircraft);
     break;
   case MapItem::Type::AIRSPACE:
     ::Draw(canvas, rc, (const AirspaceMapItem &)item,
@@ -482,12 +500,6 @@ MapItemListRenderer::Draw(Canvas &canvas, const PixelRect rc,
     ::Draw(canvas, rc, (const TrafficMapItem &)item,
            row_renderer, traffic_look, traffic_list);
     break;
-
-#ifdef HAVE_SKYLINES_TRACKING
-  case MapItem::Type::SKYLINES_TRAFFIC:
-    ::Draw(canvas, rc, (const SkyLinesTrafficMapItem &)item, row_renderer);
-    break;
-#endif
 
   case MapItem::Type::THERMAL:
     ::Draw(canvas, rc, (const ThermalMapItem &)item, utc_offset,

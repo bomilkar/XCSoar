@@ -13,6 +13,7 @@
 #include "Profile/Current.hpp"
 #include "Profile/Settings.hpp"
 #include "Asset.hpp"
+#include "Hardware/CPU.hpp"
 #include "Simulator.hpp"
 #include "InfoBoxes/InfoBoxManager.hpp"
 #include "Terrain/RasterTerrain.hpp"
@@ -21,6 +22,9 @@
 #include "Message.hpp"
 #include "Weather/Rasp/RaspStore.hpp"
 #include "Weather/Rasp/Configured.hpp"
+#ifdef HAVE_HTTP
+#include "Weather/SkySight/SkySightClient.hpp"
+#endif
 #include "Input/InputEvents.hpp"
 #include "Input/InputQueue.hpp"
 #include "Dialogs/StartupDialog.hpp"
@@ -70,6 +74,7 @@
 #include "net/client/tim/Glue.hpp"
 #include "Hardware/DisplayDPI.hpp"
 #include "Hardware/DisplayGlue.hpp"
+#include "Screen/Layout.hpp"
 #include "util/Compiler.h"
 #include "NMEA/Aircraft.hpp"
 #include "Waypoint/Waypoints.hpp"
@@ -125,6 +130,7 @@
 
 #ifdef __APPLE__
 #include "Apple/Services.hpp"
+#include "Apple/BackgroundSave.hpp"
 #endif
 
 #ifdef HAVE_EDL
@@ -330,9 +336,6 @@ Startup(UI::Display &display)
   if (!main_window->IsDefined())
     return false;
 
-  LogFmt("Display dpi={},{}",
-         Display::GetDPI(display).x, Display::GetDPI(display).y);
-
 #ifdef ENABLE_OPENGL
   LogFmt("OpenGL: "
 #ifdef HAVE_DYNAMIC_MULTI_DRAW_ARRAYS
@@ -399,6 +402,13 @@ Startup(UI::Display &display)
   if (!LoadProfile())
     return false;
 
+#ifdef __APPLE__
+  /* now that there is a profile to save, arm the "save on suspend"
+     hook; doing this any earlier could persist the still empty
+     profile map */
+  InitializeAppleBackgroundSave();
+#endif
+
   operation.SetText(_("Initialising"));
 
   /* create XCSoarData on the first start */
@@ -418,6 +428,19 @@ Startup(UI::Display &display)
 
   Display::LoadOrientation(operation);
   main_window->CheckResize();
+
+  SetDisplayType(CommonInterface::GetUISettings().display.display_type);
+
+  {
+    const PixelSize size = main_window->GetSize();
+    const auto dpi = Display::GetDPI(display);
+    LogFmt("Display: {}x{} dpi={},{} vdpi={} size={:.2f}x{:.2f}in "
+           "small_screen={}",
+           size.width, size.height, dpi.x, dpi.y, Layout::vdpi,
+           dpi.x > 0 ? double(size.width) / dpi.x : 0.,
+           dpi.y > 0 ? double(size.height) / dpi.y : 0.,
+           Layout::small_screen);
+  }
 
   /* Log device capabilities and features after initialization */
   LogFormat("Device capabilities: HasIOIOLib()=%s",
@@ -442,6 +465,13 @@ Startup(UI::Display &display)
             HasEPaper() ? "yes" : "no");
   LogFormat("Device capabilities: IsDithered()=%s",
             IsDithered() ? "yes" : "no");
+  if (const unsigned max_cpu_khz = GetMaxCPUFrequencyKHz();
+      max_cpu_khz != 0)
+    LogFormat("Device capabilities: max_cpu_freq=%u kHz", max_cpu_khz);
+  else
+    LogFormat("Device capabilities: max_cpu_freq=unknown");
+  LogFormat("Device capabilities: IsSlowCPU()=%s",
+            IsSlowCPU() ? "yes" : "no");
 
   main_window->InitialiseConfigured();
 
@@ -580,6 +610,11 @@ Startup(UI::Display &display)
   // Scan for weather forecast
   LogString("RASP load");
   auto rasp = LoadConfiguredRasp();
+
+#ifdef HAVE_HTTP
+  auto skysight = std::make_shared<SkySightClient>(*Net::curl);
+  DataGlobals::SetSkySight(skysight);
+#endif
 
   // Reads the airspace files
   {
@@ -751,6 +786,14 @@ DestroyNetComponents() noexcept
 #endif
 
 void
+SaveUserState() noexcept
+{
+  SaveFlarmColors();
+  SaveFlarmMessaging();
+  Profile::Save();
+}
+
+void
 Shutdown()
 {
   VerboseOperationEnvironment operation;
@@ -760,6 +803,12 @@ Shutdown()
 
   // Turn off all displays first to prevent UI operations from blocking
   global_running = false;
+
+#ifdef __APPLE__
+  /* stop saving on suspend before we start tearing down the state
+     which SaveUserState() would touch */
+  DeinitializeAppleBackgroundSave();
+#endif
 
 #ifdef HAVE_HTTP
   if (main_window != nullptr)
@@ -805,12 +854,9 @@ Shutdown()
   }
 #endif
 
-  SaveFlarmColors();
-  SaveFlarmMessaging();
-
   // Save settings to profile
   operation.SetText(_("Shutdown, saving profile..."));
-  Profile::Save();
+  SaveUserState();
 
   operation.SetText(_("Shutdown, please wait..."));
 
@@ -864,6 +910,12 @@ Shutdown()
 
   LogString("delete MapWindow");
   main_window->Deinitialise();
+
+#ifdef HAVE_HTTP
+  /* Release SkySight before HTTP/curl teardown so active tile requests cancel
+     while the UI event loop is still alive. */
+  DataGlobals::SetSkySight({});
+#endif
 
   // Stop sound
   AudioVarioGlue::Deinitialise();

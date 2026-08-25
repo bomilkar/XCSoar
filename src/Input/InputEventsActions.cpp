@@ -33,6 +33,9 @@ https://xcsoar.readthedocs.io/en/latest/input_events.html
 #include "Dialogs/Error.hpp"
 #include "Dialogs/Device/Vega/SwitchesDialog.hpp"
 #include "Dialogs/Airspace/Airspace.hpp"
+#ifdef HAVE_HTTP
+#include "Dialogs/Airspace/NOTAMList.hpp"
+#endif
 #include "Dialogs/Task/TaskDialogs.hpp"
 #include "Dialogs/Traffic/TrafficDialogs.hpp"
 #include "Dialogs/Waypoint/WaypointDialogs.hpp"
@@ -72,6 +75,7 @@ https://xcsoar.readthedocs.io/en/latest/input_events.html
 #include "Device/MultipleDevices.hpp"
 #include "Form/DataField/File.hpp"
 #include "Dialogs/FilePicker.hpp"
+#include "Dialogs/InternalLink.hpp"
 #include "net/client/WeGlide/UploadIGCFile.hpp"
 #include "Components.hpp"
 #include "BackendComponents.hpp"
@@ -535,6 +539,18 @@ InputEvents::eventGestureHelp([[maybe_unused]] const char *misc)
   dlgGestureHelpShowModal();
 }
 
+// NOTAMList
+// Opens the list of loaded NOTAMs
+void
+InputEvents::eventNOTAMList([[maybe_unused]] const char *misc)
+{
+#ifdef HAVE_HTTP
+  ShowNOTAMListDialog(*CommonInterface::main_window);
+#else
+  Message::AddMessage(_("NOTAM list requires HTTP support"));
+#endif
+}
+
 // NearestWaypointDetails
 // Displays the waypoint details dialog
 void
@@ -798,6 +814,11 @@ InputEvents::eventExchangeFrequencies([[maybe_unused]] const char *misc)
 
 void
 InputEvents::eventUploadIGCFile([[maybe_unused]] const char *misc) {
+  if (!CommonInterface::GetComputerSettings().weglide.IsConfigured()) {
+    HandleInternalLink("xcsoar://config/weglide");
+    return;
+  }
+
   FileDataField df;
   df.ScanMultiplePatterns(GetFileTypePatterns(FileType::IGC));
   df.SetFileType(FileType::IGC);

@@ -19,6 +19,7 @@
 #include "UIGlobals.hpp"
 #include "Hardware/Vibrator.hpp"
 #include "Repository/FileType.hpp"
+#include "Version.hpp"
 
 using namespace std::chrono;
 
@@ -31,7 +32,12 @@ enum ControlIndex {
 #endif
   MenuTimeout,
   TextInput,
-  HapticFeedback
+#ifdef HAVE_VIBRATOR
+  HapticFeedback,
+#endif
+  ShowQuickGuideOnStartup,
+  ShowReleaseNotesOnStartup,
+  DisclaimerAccepted,
 };
 
 class InterfaceConfigPanel final : public RowFormWidget {
@@ -183,6 +189,41 @@ InterfaceConfigPanel::Prepare(ContainerWindow &parent,
                haptic_feedback_list, (unsigned)settings.haptic_feedback);
   SetExpertRow(HapticFeedback);
 #endif /* HAVE_VIBRATOR */
+
+  bool hide_quick_guide = false;
+  Profile::Get(ProfileKeys::HideQuickGuideDialogOnStartup,
+               hide_quick_guide);
+  AddBoolean(C_("Setting", "Show Quick Guide"),
+             _("If enabled, the Quick Guide is shown when XCSoar starts."),
+             !hide_quick_guide);
+
+  const char *last_seen_news =
+    Profile::Get(ProfileKeys::LastSeenNewsVersion);
+  const bool news_seen = last_seen_news != nullptr &&
+    StringIsEqual(last_seen_news, XCSoar_Version);
+  AddBoolean(C_("Setting", "Show release notes"),
+             _("If enabled, the What's New page is shown on the next "
+               "startup."),
+             !news_seen);
+
+  const char *disclaimer_acknowledged_version =
+    Profile::Get(ProfileKeys::DisclaimerAcknowledgedVersion);
+  const bool disclaimer_acknowledged =
+    disclaimer_acknowledged_version != nullptr &&
+    StringIsEqual(disclaimer_acknowledged_version, XCSoar_Version);
+
+  static constexpr StaticEnumChoice disclaimer_accepted_list[] = {
+    { 0, N_("No") },
+    { 1, N_("Yes") },
+    nullptr
+  };
+
+  AddEnum(_("Safety disclaimer accepted"),
+          _("Whether the safety disclaimer has been accepted for this "
+            "version."),
+          disclaimer_accepted_list,
+          disclaimer_acknowledged ? 1u : 0u);
+  SetExpertRow(DisclaimerAccepted);
 }
 
 bool
@@ -207,10 +248,15 @@ InterfaceConfigPanel::Save(bool &_changed) noexcept
   if (wp != nullptr) {
     DataFieldEnum &df = *(DataFieldEnum *)wp->GetDataField();
 
+    /* Use AllocatedPath here: Path::empty() null-dereferences, while
+       AllocatedPath::empty() is safe. Missing / empty LanguageFile means
+       automatic — same as ReadLanguageFile(); do not persist "auto" just
+       because the key was absent (#1793). */
     const auto old_value_buffer = Profile::GetPath(ProfileKeys::LanguageFile);
-    Path old_value = old_value_buffer;
-    if (old_value == nullptr)
-      old_value = Path("");
+    const bool old_is_auto =
+      old_value_buffer == nullptr || old_value_buffer.empty() ||
+      old_value_buffer == Path("auto");
+    Path old_value = old_is_auto ? Path("auto") : Path(old_value_buffer);
 
     auto old_base = old_value.GetBase();
     if (old_base == nullptr)
@@ -260,6 +306,42 @@ InterfaceConfigPanel::Save(bool &_changed) noexcept
 #ifdef HAVE_VIBRATOR
   changed |= SaveValueEnum(HapticFeedback, ProfileKeys::HapticFeedback, settings.haptic_feedback);
 #endif
+
+  bool hide_quick_guide = false;
+  Profile::Get(ProfileKeys::HideQuickGuideDialogOnStartup, hide_quick_guide);
+  if (SaveValue(ShowQuickGuideOnStartup,
+                ProfileKeys::HideQuickGuideDialogOnStartup,
+                hide_quick_guide, true))
+    changed = true;
+
+  const bool show_release_notes = GetValueBoolean(ShowReleaseNotesOnStartup);
+  const char *last_seen_news =
+    Profile::Get(ProfileKeys::LastSeenNewsVersion);
+  const bool news_seen = last_seen_news != nullptr &&
+    StringIsEqual(last_seen_news, XCSoar_Version);
+  if (show_release_notes != !news_seen) {
+    if (show_release_notes)
+      Profile::Set(ProfileKeys::LastSeenNewsVersion, "");
+    else
+      Profile::Set(ProfileKeys::LastSeenNewsVersion, XCSoar_Version);
+    changed = true;
+  }
+
+  const bool disclaimer_accepted =
+    GetValueEnum(DisclaimerAccepted) != 0;
+  const char *disclaimer_acknowledged_version =
+    Profile::Get(ProfileKeys::DisclaimerAcknowledgedVersion);
+  const bool disclaimer_acknowledged =
+    disclaimer_acknowledged_version != nullptr &&
+    StringIsEqual(disclaimer_acknowledged_version, XCSoar_Version);
+  if (disclaimer_accepted != disclaimer_acknowledged) {
+    if (disclaimer_accepted)
+      Profile::Set(ProfileKeys::DisclaimerAcknowledgedVersion,
+                   XCSoar_Version);
+    else
+      Profile::Set(ProfileKeys::DisclaimerAcknowledgedVersion, "");
+    changed = true;
+  }
 
   _changed |= changed;
   return true;
