@@ -35,8 +35,10 @@ public:
     GeoPoint location;
     /** Barometric altitude (m STD) */
     double pressure_altitude;
-    /** GPS Altitude (m) */
+    /** GPS Altitude AMSL (m) */
     double altitude_gps;
+    /** GPS altitude above WGS84 ellipsoid (m) */
+    double altitude_ellipsoid;
     /** Date and time of fix */
     BrokenDateTime date_time_utc;
     /** IDs of satellites in fix */
@@ -59,6 +61,7 @@ public:
 
     bool pressure_altitude_available;
     bool gps_altitude_available;
+    bool gps_ellipsoid_altitude_available;
 
     /** 
      * Set buffer value from NMEA_INFO structure
@@ -95,6 +98,16 @@ public:
 
   bool IsActive() const noexcept {
     return writer != nullptr;
+  }
+
+  /**
+   * The IGC file being written, or nullptr while the logger is off.
+   */
+  Path GetPath() const noexcept {
+    if (!IsActive())
+      return nullptr;
+
+    return filename;
   }
 
   void StartLogger(const NMEAInfo &gps_info, const LoggerSettings &settings,

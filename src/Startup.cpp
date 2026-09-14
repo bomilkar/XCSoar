@@ -75,6 +75,10 @@
 #include "Hardware/DisplayDPI.hpp"
 #include "Hardware/DisplayGlue.hpp"
 #include "Screen/Layout.hpp"
+#include "ui/display/Display.hpp"
+#ifdef USE_WAYLAND
+#include "ui/display/wayland/Scale.hpp"
+#endif
 #include "util/Compiler.h"
 #include "NMEA/Aircraft.hpp"
 #include "Waypoint/Waypoints.hpp"
@@ -131,6 +135,7 @@
 #ifdef __APPLE__
 #include "Apple/Services.hpp"
 #include "Apple/BackgroundSave.hpp"
+#include "Apple/DarkMode.hpp"
 #endif
 
 #ifdef HAVE_EDL
@@ -146,17 +151,33 @@ static AllMonitors *all_monitors;
 static GlideComputerTaskEvents *task_events;
 static DeviceFactory *device_factory;
 
+/** @see WasStartupCancelledByUser() */
+static bool startup_cancelled_by_user = false;
+
+bool
+WasStartupCancelledByUser() noexcept
+{
+  return startup_cancelled_by_user;
+}
+
 static bool
 LoadProfile()
 {
+  /* run the data-layout migration BEFORE the profile is selected and
+     loaded: it moves root-level profiles into profiles/ - selecting or
+     loading first ends up with an empty profile that later overwrites
+     the migrated one on exit (settings loss on first start after an
+     upgrade) */
+  MigrateDataLayoutToSubdirs();
+
   if (Profile::GetPath() == nullptr &&
       !dlgStartupShowModal()) {
     LogString("LoadProfile: no profile path and startup dialog was cancelled");
+    startup_cancelled_by_user = true;
     return false;
   }
 
   Profile::Load();
-  MigrateDataLayoutToSubdirs();
   Profile::Use(Profile::map);
 
   Units::SetConfig(CommonInterface::GetUISettings().format.units);
@@ -336,6 +357,14 @@ Startup(UI::Display &display)
   if (!main_window->IsDefined())
     return false;
 
+#ifdef __APPLE__
+  /* inherit the system appearance; this must happen after the window
+     exists, because on iOS the appearance is read from the window
+     scene, and before anything builds a Look or shows the progress
+     window */
+  UpdateAppleDarkMode();
+#endif
+
 #ifdef ENABLE_OPENGL
   LogFmt("OpenGL: "
 #ifdef HAVE_DYNAMIC_MULTI_DRAW_ARRAYS
@@ -368,6 +397,7 @@ Startup(UI::Display &display)
     SimulatorPromptResult result = dlgSimulatorPromptShowModal();
     switch (result) {
     case SPR_QUIT:
+      startup_cancelled_by_user = true;
       return false;
 
     case SPR_FLY:
@@ -440,6 +470,16 @@ Startup(UI::Display &display)
            dpi.x > 0 ? double(size.width) / dpi.x : 0.,
            dpi.y > 0 ? double(size.height) / dpi.y : 0.,
            Layout::small_screen);
+#ifdef USE_WAYLAND
+    const auto hardware = display.GetHardwareSize();
+    const auto logical = display.GetSize();
+    const auto output_mm = display.GetSizeMM();
+    LogFmt("Monitor: {}x{} dpi={},{} {}x{}mm logical={}x{} scale={:.2f}",
+           hardware.width, hardware.height, dpi.x, dpi.y,
+           output_mm.width, output_mm.height,
+           logical.width, logical.height,
+           display.GetScale120() / (double)Wayland::SCALE_100);
+#endif
   }
 
   /* Log device capabilities and features after initialization */
@@ -553,8 +593,10 @@ Startup(UI::Display &display)
 #endif
 
   // Show unified Quick Guide dialog (warranty + guide pages)
-  if (!dlgQuickGuideShowModal())
+  if (!dlgQuickGuideShowModal()) {
+    startup_cancelled_by_user = true;
     return false;
+  }
 
   GlidePolar &gp = CommonInterface::SetComputerSettings().polar.glide_polar_task;
   gp = GlidePolar(0);

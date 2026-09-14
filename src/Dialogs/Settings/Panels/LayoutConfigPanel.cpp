@@ -2,39 +2,19 @@
 // Copyright The XCSoar Project
 
 #include "LayoutConfigPanel.hpp"
-#include "ui/canvas/Features.hpp" // for DRAW_MOUSE_CURSOR
 #include "Profile/Keys.hpp"
 #include "Profile/Profile.hpp"
 #include "Form/DataField/Enum.hpp"
-#include "Hardware/RotateDisplay.hpp"
+#include "InfoBoxes/InfoBoxGeometryList.hpp"
 #include "Interface.hpp"
 #include "MainWindow.hpp"
-#include "LogFile.hpp"
 #include "Language/Language.hpp"
 #include "Widget/RowFormWidget.hpp"
 #include "UIGlobals.hpp"
 #include "Asset.hpp"
 #include "Menu/ShowButton.hpp"
-#include "ActionInterface.hpp"
-#include "util/Macros.hpp"
-
-#ifdef ANDROID
-#include "Android/Main.hpp"
-#include "Android/NativeView.hpp"
-#endif
-
-#ifdef USE_POLL_EVENT
-#include "ui/event/Globals.hpp"
-#include "ui/event/Queue.hpp"
-#endif
 
 enum ControlIndex {
-#ifdef ANDROID
-  FullScreen,
-#endif
-  MapOrientation,
-  DarkMode,
-  AppDisplayType,
   AppInfoBoxGeom,
   InfoBoxTitleScale,
   TabDialogStyle,
@@ -45,86 +25,6 @@ enum ControlIndex {
   ShowMenuButton,
   ShowZoomButton,
   ShowQuickMenuButton,
-#ifdef DRAW_MOUSE_CURSOR
-  CursorSize,
-  CursorInverted,
-#endif
-};
-
-static constexpr StaticEnumChoice display_orientation_list[] = {
-  { DisplayOrientation::DEFAULT,
-    N_("Default") },
-  { DisplayOrientation::PORTRAIT,
-    N_("Portrait") },
-  { DisplayOrientation::LANDSCAPE,
-    N_("Landscape") },
-  { DisplayOrientation::REVERSE_PORTRAIT,
-    N_("Reverse Portrait") },
-  { DisplayOrientation::REVERSE_LANDSCAPE,
-    N_("Reverse Landscape") },
-  nullptr
-};
-
-static constexpr StaticEnumChoice display_type_list[] = {
-  { DisplayType::LCD, NC_("Setting", "LCD"),
-    N_("Conventional LCD or OLED. Full scrolling animations.") },
-  { DisplayType::E_INK, NC_("Setting", "E-ink"),
-    N_("Monochrome electronic paper. Disables kinetic and smooth "
-       "scrolling.") },
-  { DisplayType::COLOR_E_INK, NC_("Setting", "Color e-ink"),
-    N_("Color electronic paper. Disables kinetic and smooth "
-       "scrolling like monochrome e-ink.") },
-  nullptr
-};
-
-static_assert(ARRAY_SIZE(display_type_list) ==
-              unsigned(DisplayType::COUNT) + 1,
-              "display_type_list must match DisplayType::COUNT");
-
-static constexpr StaticEnumChoice info_box_geometry_list[] = {
-  { InfoBoxSettings::Geometry::SPLIT_8,
-    N_("8 Split") },
-  { InfoBoxSettings::Geometry::SPLIT_10,
-    N_("10 Split") },
-  { InfoBoxSettings::Geometry::SPLIT_3X4,
-    N_("12 Split in 3 rows") },
-  { InfoBoxSettings::Geometry::SPLIT_3X5,
-    N_("15 Split in 3 rows") },
-  { InfoBoxSettings::Geometry::SPLIT_3X6,
-    N_("18 Split in 3 rows") },
-  { InfoBoxSettings::Geometry::BOTTOM_RIGHT_8,
-    N_("8 Bottom or Right") },
-  { InfoBoxSettings::Geometry::BOTTOM_8_VARIO,
-    N_("8 Bottom + Vario (Portrait)") },
-  { InfoBoxSettings::Geometry::TOP_LEFT_8,
-    N_("8 Top or Left") },
-  { InfoBoxSettings::Geometry::TOP_8_VARIO,
-    N_("8 Top + Vario (Portrait)") },
-  { InfoBoxSettings::Geometry::RIGHT_9_VARIO,
-    N_("9 Right + Vario (Landscape)") },
-  { InfoBoxSettings::Geometry::LEFT_6_RIGHT_3_VARIO,
-    N_("9 Left + Right + Vario (Landscape)") },
-  { InfoBoxSettings::Geometry::LEFT_12_RIGHT_3_VARIO,
-    N_("12 Left + 3 Right Vario (Landscape)") },
-  { InfoBoxSettings::Geometry::RIGHT_5,
-    N_("5 Right (Square)") },
-  { InfoBoxSettings::Geometry::BOTTOM_RIGHT_10,
-    N_("10 Bottom or Right") },
-  { InfoBoxSettings::Geometry::BOTTOM_RIGHT_12,
-    N_("12 Bottom or Right") },
-  { InfoBoxSettings::Geometry::TOP_LEFT_10,
-    N_("10 Top or Left") },
-  { InfoBoxSettings::Geometry::TOP_LEFT_12,
-    N_("12 Top or Left") },
-  { InfoBoxSettings::Geometry::RIGHT_16,
-    N_("16 Right (Landscape)") },
-  { InfoBoxSettings::Geometry::RIGHT_24,
-    N_("24 Bottom or Right") },
-  { InfoBoxSettings::Geometry::TOP_LEFT_4,
-    N_("4 Top or Left") },
-  { InfoBoxSettings::Geometry::BOTTOM_RIGHT_4,
-    N_("4 Bottom or Right") },
-  nullptr
 };
 
 static constexpr StaticEnumChoice tabdialog_style_list[] = {
@@ -152,16 +52,6 @@ static constexpr StaticEnumChoice infobox_border_list[] = {
     N_("Shaded"), nullptr /* TODO: help text */ },
   { InfoBoxSettings::BorderStyle::GLASS,
     N_("Glass"), nullptr /* TODO: help text */ },
-  nullptr
-};
-
-static constexpr StaticEnumChoice dark_mode_list[] = {
-  { UISettings::DarkMode::AUTO, NC_("Setting", "Auto"),
-    N_("Use the system-wide setting") },
-  { UISettings::DarkMode::OFF, N_("Off"),
-    N_("Black text on white background") },
-  { UISettings::DarkMode::ON, N_("On"),
-    N_("White text on black background") },
   nullptr
 };
 
@@ -200,32 +90,6 @@ LayoutConfigPanel::Prepare(ContainerWindow &parent,
   saved = false;
 
   RowFormWidget::Prepare(parent, rc);
-
-#ifdef ANDROID
-  AddBoolean(_("Full screen"), _("Run XCSoar in full screen mode"),
-             ui_settings.display.full_screen);
-#endif
-
-  if (Display::RotateSupported())
-    AddEnum(_("Display orientation"), _("Rotate the display on devices that support it."),
-            display_orientation_list, (unsigned)ui_settings.display.orientation);
-  else
-    AddDummy();
-
-#ifndef KOBO
-  AddEnum(_("Dark mode"), nullptr, dark_mode_list,
-          (unsigned)ui_settings.dark_mode);
-  SetExpertRow(DarkMode);
-#else
-  AddDummy();
-#endif
-
-  AddEnum(C_("Setting", "Display type"),
-          _("Select the display technology. E-ink modes disable kinetic "
-            "and smooth scrolling for slow refresh screens."),
-          display_type_list,
-          (unsigned)ui_settings.display.display_type);
-  SetExpertRow(AppDisplayType);
 
   AddEnum(_("InfoBox geometry"),
           _("A list of possible InfoBox layouts. Do some trials to find the best for your screen size."),
@@ -272,12 +136,6 @@ LayoutConfigPanel::Prepare(ContainerWindow &parent,
              ui_settings.show_quickmenu_button);
   SetExpertRow(ShowQuickMenuButton);
 
-#ifdef DRAW_MOUSE_CURSOR
-  AddInteger(_("Cursor zoom"), _("Cursor zoom factor"), "%d x", "%d x", 1, 10, 1,
-             (unsigned)ui_settings.display.cursor_size);
-  AddBoolean(_("Invert cursor color"), _("Enable black cursor"),
-             ui_settings.display.invert_cursor_colors);
-#endif
 }
 
 void
@@ -306,37 +164,6 @@ LayoutConfigPanel::Save(bool &_changed) noexcept
 
   UISettings &ui_settings = CommonInterface::SetUISettings();
   saved = true;
-
-#ifdef ANDROID
-  changed |= SaveValue(FullScreen, ProfileKeys::FullScreen,
-                       ui_settings.display.full_screen);
-  native_view->SetFullScreen(Java::GetEnv(), ui_settings.display.full_screen);
-#endif
-
-  bool orientation_changed = false;
-
-  if (Display::RotateSupported()) {
-    orientation_changed =
-      SaveValueEnum(MapOrientation, ProfileKeys::MapOrientation,
-                    ui_settings.display.orientation);
-    changed |= orientation_changed;
-  }
-
-#ifndef KOBO
-  changed |= SaveValueEnum(DarkMode, ProfileKeys::DarkMode,
-                           ui_settings.dark_mode);
-#else
-  if (ui_settings.dark_mode != UISettings::DarkMode::OFF) {
-    ui_settings.dark_mode = UISettings::DarkMode::OFF;
-    changed = true;
-  }
-#endif
-
-  if (SaveValueEnum(AppDisplayType, ProfileKeys::DisplayType,
-                    ui_settings.display.display_type)) {
-    changed = true;
-    SetDisplayType(ui_settings.display.display_type);
-  }
 
   bool info_box_geometry_changed = false;
 
@@ -381,27 +208,7 @@ LayoutConfigPanel::Save(bool &_changed) noexcept
   DialogSettings &dialog_settings = CommonInterface::SetUISettings().dialog;
   changed |= SaveValueEnum(TabDialogStyle, ProfileKeys::AppDialogTabStyle, dialog_settings.tab_style);
 
-#ifdef DRAW_MOUSE_CURSOR
-  changed |= SaveValueInteger(CursorSize, ProfileKeys::CursorSize,
-                              ui_settings.display.cursor_size);
-  CommonInterface::main_window->SetCursorSize(ui_settings.display.cursor_size);
-
-  changed |= SaveValue(CursorInverted, ProfileKeys::CursorColorsInverted, ui_settings.display.invert_cursor_colors);
-  CommonInterface::main_window->SetCursorColorsInverted(ui_settings.display.invert_cursor_colors);
-#endif
-
-  if (orientation_changed) {
-    assert(Display::RotateSupported());
-
-    if (!Display::Rotate(ui_settings.display.orientation))
-      LogString("Display rotation failed");
-
-#ifdef USE_POLL_EVENT
-    UI::event_queue->SetDisplayOrientation(ui_settings.display.orientation);
-#endif
-
-    CommonInterface::main_window->CheckResize();
-  } else if (info_box_geometry_changed)
+  if (info_box_geometry_changed)
     CommonInterface::main_window->ReinitialiseLayout();
 
   _changed |= changed;

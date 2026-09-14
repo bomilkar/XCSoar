@@ -41,10 +41,6 @@
 #include "Storage/StorageManager.hpp"
 #include "Storage/StorageEvents.hpp"
 
-#ifdef USE_WINUSER
-#include "Storage/win/WinHotplugForward.hpp"
-#endif
-
 #ifdef ANDROID
 #include "Android/ReceiveTask.hpp"
 #include "Android/Main.hpp"
@@ -1013,26 +1009,6 @@ MainWindow::OnStorageEvent(const StorageEventInfo &info) noexcept
     popup->AddMessage(msg.c_str());
 }
 
-// Windows event handlers
-
-#ifdef USE_WINUSER
-LRESULT
-MainWindow::OnMessage(HWND hWnd, UINT message,
-                      WPARAM wParam, LPARAM lParam) noexcept
-{
-  switch (message) {
-  case WM_DEVICECHANGE:
-    /* Forward device change notifications to the storage hotplug
-       forwarder which will call the registered
-       WindowsStorageHotplugMonitor. */
-    Storage::Win::ForwardDeviceChange(wParam, lParam);
-    break;
-  }
-
-  return SingleWindow::OnMessage(hWnd, message, wParam, lParam);
-}
-#endif
-
 void
 MainWindow::OnResize(PixelSize new_size) noexcept
 {
@@ -1342,6 +1318,29 @@ MainWindow::OnClose() noexcept
 void
 MainWindow::OnPaint(Canvas &canvas) noexcept
 {
+#ifdef ENABLE_OPENGL
+  /* The gesture trail is painted by the #GlueMapWindow, but it
+     follows the pointer past the map borders, and OpenGL does not
+     clip a child window to its rectangle.  Areas which no child
+     window repaints (the safe area insets reserved by the
+     #TopWindow, for example) would keep those pixels forever, and
+     each buffer of the swap chain needs a clean frame of its own.
+     Therefore clear the whole window while a trail exists, and for
+     as many extra frames as the swap chain has buffers after it is
+     gone. */
+  const bool gesture_trail = map != nullptr && map->HasGestureTrail();
+  if (gesture_trail)
+    clear_gesture_frames = GetPresentationBufferCount();
+
+  if (gesture_trail || clear_gesture_frames > 0) {
+    canvas.DrawFilledRectangle(canvas.GetRect(), COLOR_BLACK);
+
+    if (!gesture_trail && --clear_gesture_frames > 0)
+      /* nothing else is going to request the remaining frames */
+      Invalidate();
+  }
+#endif
+
   if (HaveTopWidget() && map != nullptr) {
     /* draw a separator between top widget and map */
     PixelRect rc = map->GetPosition();

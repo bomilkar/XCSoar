@@ -151,8 +151,6 @@ IsCtrlKeyPressed() noexcept
 {
 #ifdef ENABLE_SDL
   return SDL_GetModState() & (KMOD_LCTRL|KMOD_RCTRL);
-#elif defined(USE_WINUSER)
-  return GetKeyState(VK_CONTROL) & 0x8000;
 #elif defined(USE_X11)
   return UI::event_queue->WasCtrlClick();
 #else
@@ -335,6 +333,11 @@ GlueMapWindow::OnMouseUp(PixelPoint p) noexcept
 
   case DRAG_GESTURE:
     const char* gesture = gestures.Finish();
+
+    /* repaint to erase the gesture trail; the map is not redrawn on
+       its own unless the gesture happens to trigger it */
+    PaintWindow::Invalidate();
+
     if (gesture && OnMouseGesture(gesture))
       return true;
 
@@ -663,8 +666,12 @@ GlueMapWindow::OnCancelMode() noexcept
     ResetMultiTouchSessionState();
 #endif
 
-    if (drag_mode == DRAG_GESTURE)
+    if (drag_mode == DRAG_GESTURE) {
       gestures.Finish();
+
+      /* repaint to erase the gesture trail */
+      PaintWindow::Invalidate();
+    }
 
     ReleaseCapture();
     drag_mode = DRAG_NONE;
@@ -693,6 +700,9 @@ GlueMapWindow::OnPaint(Canvas &canvas) noexcept
   if (IsPanChromeVisible())
     DrawCrossHairs(canvas);
 
+  /* the trail may leave this window (the pointer is captured); under
+     OpenGL it is painted over the InfoBoxes, and MainWindow::OnPaint()
+     takes care of erasing it afterwards */
   DrawGesture(canvas);
 }
 
@@ -726,7 +736,7 @@ GlueMapWindow::OnPaintBuffer(Canvas &canvas) noexcept
   MapWindow::OnPaintBuffer(canvas);
 
   DrawMapScale(canvas, GetClientRect(), render_projection);
-  if (IsPanChromeVisible())
+  if (IsPanChromeVisible() || DEBUG_ALL_MAP_OVERLAYS)
     DrawPanInfo(canvas);
 
 #ifdef ENABLE_OPENGL
@@ -770,9 +780,9 @@ GlueMapWindow::Render(Canvas &canvas, const PixelRect &rc) noexcept
 {
   MapWindow::Render(canvas, rc);
 
-  if (IsNearSelf()) {
+  if (IsNearSelf() || DEBUG_ALL_MAP_OVERLAYS) {
     draw_sw.Mark("DrawGlueMisc");
-    if (GetMapSettings().show_thermal_profile)
+    if (GetMapSettings().show_thermal_profile || DEBUG_ALL_MAP_OVERLAYS)
       DrawThermalBand(canvas, rc);
     DrawStallRatio(canvas, rc);
     DrawFlightMode(canvas, rc);

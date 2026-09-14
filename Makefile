@@ -65,6 +65,12 @@
 #   TARGET_DIR  "<path>" to build into output/<path> instead of output/<target>
 #
 #   TARGET_OUTPUT_DIR "<path>" to build into arbitrary directory
+#
+#   THIRDPARTY_PACKAGES
+#               "auto" for the target's default third-party package set,
+#               or a comma-separated list of packages to provision through
+#               the third-party build pipeline.
+#               Omitted packages are discovered on the system.
 
 .DEFAULT_GOAL := all
 
@@ -97,7 +103,6 @@ include $(topdir)/build/vfb.mk
 include $(topdir)/build/fb.mk
 include $(topdir)/build/wayland.mk
 include $(topdir)/build/egl.mk
-include $(topdir)/build/glx.mk
 include $(topdir)/build/opengl.mk
 endif
 

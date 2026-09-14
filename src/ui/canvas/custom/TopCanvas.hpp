@@ -30,10 +30,6 @@
 #endif
 #endif
 
-#ifdef USE_GLX
-#include "ui/glx/System.hpp"
-#endif
-
 #ifdef DITHER
 #include "../memory/Dither.hpp"
 #endif
@@ -66,6 +62,17 @@ class TopCanvas
   const LinuxGraphicsTTY linux_graphics_tty;
 #endif
 
+#ifdef ENABLE_OPENGL
+  /**
+   * Swap-chain depth.  Extra full-window clears after an OpenGL
+   * gesture trail use this so every presentation buffer gets a
+   * clean frame.  Default 4 covers typical EGL/Android queues
+   * (triple-buffer plus a spare); GetPresentationBufferCount()
+   * may raise it from EGL_BUFFER_AGE_KHR after the first swap.
+   */
+  unsigned presentation_buffer_count = 4;
+#endif
+
 #ifdef USE_EGL
 
 #ifdef MESA_KMS
@@ -83,10 +90,6 @@ class TopCanvas
 
   EGLSurface surface = EGL_NO_SURFACE;
 #endif // USE_EGL
-
-#ifdef USE_GLX
-  GLXWindow glx_window;
-#endif // USE_GLX
 
 #ifdef ENABLE_SDL
   SDL_Window *const window;
@@ -137,9 +140,6 @@ class TopCanvas
 public:
 #ifdef ENABLE_SDL
   TopCanvas(UI::Display &_display, SDL_Window *_window);
-#elif defined(USE_GLX)
-  TopCanvas(UI::Display &_display,
-            X11Window x_window);
 #elif defined(USE_X11) || defined(USE_WAYLAND)
   TopCanvas(UI::Display &_display, EGLNativeWindowType native_window)
     :display(_display)
@@ -170,13 +170,21 @@ public:
 #endif
   }
 
-#if defined(USE_FB) || (defined(ENABLE_OPENGL) && (defined(USE_EGL) || defined(USE_GLX) || defined(ENABLE_SDL)))
+#if defined(USE_FB) || (defined(ENABLE_OPENGL) && (defined(USE_EGL) || defined(ENABLE_SDL)))
   /**
    * Obtain the native (non-software-rotated) size of the OpenGL
    * drawable.
    */
   [[gnu::pure]]
   PixelSize GetNativeSize() const noexcept;
+#endif
+
+#ifdef ENABLE_OPENGL
+  /**
+   * How many presentation buffers does the swap chain use?
+   */
+  [[gnu::pure]]
+  unsigned GetPresentationBufferCount() const noexcept;
 #endif
 
 #if defined(USE_MEMORY_CANVAS) || defined(ENABLE_OPENGL)

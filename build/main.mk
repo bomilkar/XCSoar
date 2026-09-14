@@ -58,7 +58,6 @@ DIALOG_SOURCES = \
 	$(SRC)/Dialogs/MapItemListSettingsPanel.cpp \
 	$(SRC)/Dialogs/ColorListDialog.cpp \
 	$(SRC)/Dialogs/Airspace/dlgAirspace.cpp \
-	$(SRC)/Dialogs/Airspace/dlgAirspacePatterns.cpp \
 	$(SRC)/Dialogs/Airspace/dlgAirspaceDetails.cpp \
 	$(SRC)/Dialogs/Airspace/AirspaceList.cpp \
 	$(SRC)/Dialogs/Airspace/AirspaceCRendererSettingsDialog.cpp \
@@ -116,6 +115,7 @@ DIALOG_SOURCES = \
 	$(if $(filter y,$(HAVE_HTTP)),$(SRC)/Dialogs/Settings/Panels/NOTAMConfigPanel.cpp) \
 	$(if $(filter y,$(HAVE_HTTP)),$(SRC)/Dialogs/NOTAM/NOTAMMessageListener.cpp) \
 	$(SRC)/Dialogs/Settings/Panels/GaugesConfigPanel.cpp \
+	$(SRC)/Dialogs/Settings/Panels/DisplayConfigPanel.cpp \
 	$(SRC)/Dialogs/Settings/Panels/VarioConfigPanel.cpp \
 	$(SRC)/Dialogs/Settings/Panels/GlideComputerConfigPanel.cpp \
 	$(SRC)/Dialogs/Settings/Panels/WindConfigPanel.cpp \
@@ -562,7 +562,6 @@ XCSOAR_SOURCES := \
 	$(SRC)/Screen/Layout.cpp \
 	$(SRC)/ui/control/TerminalWindow.cpp \
 	\
-	$(SRC)/Look/FontDescription.cpp \
 	$(SRC)/Look/GlobalFonts.cpp \
 	$(SRC)/Look/DefaultFonts.cpp \
 	\
@@ -610,6 +609,7 @@ XCSOAR_SOURCES := \
 	\
 	$(SRC)/Hardware/PowerGlobal.cpp \
 	$(SRC)/Hardware/Battery.cpp \
+	$(SRC)/Hardware/DisplayBrightness.cpp \
 
 ifneq ($(TARGET),ANDROID)
 ifeq ($(TARGET_IS_LINUX),y)
@@ -653,11 +653,16 @@ ifeq ($(TARGET_IS_DARWIN),y)
 XCSOAR_SOURCES += \
 	$(SRC)/Apple/Services.cpp \
 	$(SRC)/Apple/BackgroundSave.cpp \
+	$(SRC)/Apple/DarkMode.cpp \
 	$(SRC)/Apple/SoundUtil.cpp \
 	$(SRC)/Apple/PathProvider.cpp \
 	$(SRC)/Apple/InternalSensors.cpp \
 	$(SRC)/Apple/KeyboardDetection.cpp \
 	$(SRC)/Device/SmartDeviceSensors.cpp
+endif
+
+ifeq ($(TARGET_IS_OSX),y)
+XCSOAR_SOURCES += $(SRC)/Apple/MacOSMainMenu.cpp
 endif
 
 ifeq ($(TARGET),ANDROID)
@@ -787,6 +792,13 @@ endif
 
 ifeq ($(HAVE_PCM_PLAYER),y)
 XCSOAR_SOURCES += $(SRC)/Audio/VarioGlue.cpp
+endif
+
+# Selected systemd unit controls for desktop/embedded Linux.
+ifeq ($(TARGET_IS_LINUX)$(TARGET_IS_KOBO)$(TARGET_IS_ANDROID),ynn)
+XCSOAR_SOURCES += \
+	$(SRC)/Dialogs/Settings/Panels/SystemdConfigPanel.cpp \
+	$(SRC)/Linux/SystemdServiceList.cpp
 endif
 
 include $(topdir)/build/net-wifi.mk

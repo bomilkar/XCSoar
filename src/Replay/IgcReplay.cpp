@@ -71,6 +71,12 @@ IgcReplay::Update(NMEAInfo &basic)
   } else
     basic.gps_altitude_available.Clear();
 
+  if (fix.gps_ellipsoid_altitude_available) {
+    basic.gps_ellipsoid_altitude = fix.gps_ellipsoid_altitude;
+    basic.gps_ellipsoid_altitude_available.Update(basic.clock);
+  } else
+    basic.gps_ellipsoid_altitude_available.Clear();
+
   if (fix.pressure_altitude != 0) {
     basic.ProvidePressureAltitude(fix.pressure_altitude);
     basic.ProvideBaroAltitudeTrue(fix.pressure_altitude);

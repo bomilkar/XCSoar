@@ -145,6 +145,29 @@ In ``mode=default``, the number row currently uses this grouping:
    - ``ArmAdvance toggle``
    - Task control toggle
 
+In ``mode=default``, these letter keys adjust layout and display
+settings without opening the configuration dialog:
+
+.. list-table::
+ :widths: 15 45 40
+ :header-rows: 1
+
+ * - Key
+   - Default event (``mode=default``)
+   - Group
+ * - ``L``
+   - ``InfoBoxGeometry next``
+   - Layout / display
+ * - ``N``
+   - ``DarkMode toggle``
+   - Layout / display
+ * - ``T``
+   - ``TextSize up``
+   - Layout / display
+ * - ``S``
+   - ``TextSize down``
+   - Layout / display
+
 File format
 -----------
 
@@ -281,6 +304,12 @@ Event list
    - Acknowledges and clears all status message warnings.
  * - ``Credits``
    - Displays the credits dialog.
+ * - ``DarkMode``
+   - Controls the UI dark mode setting (same as Configuration →
+     Display → Dark mode). Possible arguments: ``toggle`` (cycle
+     Off → On → Auto), ``off``, ``on``, ``auto``, ``show``
+     (display the current mode). The setting is saved to the
+     profile; look and layout are refreshed immediately.
  * - ``DeclutterLabels``
    - Controls waypoint label display filtering. Possible arguments:
      ``toggle`` (cycle through modes), ``show`` (display current
@@ -328,6 +357,13 @@ Event list
      ``finish``: show finish points
 
      Unknown arguments are ignored.
+ * - ``InfoBoxGeometry``
+   - Cycles or reports the InfoBox layout (same list as
+     Configuration → Look → Screen Layout → InfoBox geometry).
+     Possible arguments: ``next``, ``previous``, ``toggle``
+     (same as ``next``), ``show`` (display the current layout
+     name). The setting is saved to the profile and the layout is
+     rebuilt immediately.
  * - ``LockScreen``
    - Displays the screen lock dialog.
  * - ``Logger C``
@@ -474,6 +510,13 @@ Event list
      ``toggle`` (cycle all four states), ``show``.
  * - ``TerrainTopology``
    - Deprecated alias for ``TerrainTopography``.
+ * - ``TextSize``
+   - Adjusts the global UI text size scale (same as Configuration →
+     Display → Text size). Possible arguments: ``up`` / ``larger``
+     (increase by 5%), ``down`` / ``smaller`` (decrease by 5%),
+     ``show`` (display the current percentage). The scale is
+     clamped between 75% and 200%. The setting is saved to the
+     profile; look and layout are refreshed immediately.
  * - ``ThermalAssistant``
    - Opens the thermal assistant page.
  * - ``Traffic``
