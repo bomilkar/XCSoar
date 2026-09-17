@@ -288,9 +288,6 @@ Use one of the following targets:
 ``WIN32OPENGL``  Windows 32-bit (i686), OpenGL via ANGLE
 ================ =================================================
 
-The GDI targets ``PC`` and ``WIN64`` have been removed. ``PC`` remains only
-as the internal MinGW toolchain name used by the OpenGL flavors.
-
 Typical OpenGL build commands::
 
   make -j$(nproc) TARGET=WIN64OPENGL USE_CCACHE=y everything
@@ -791,8 +788,10 @@ Incremental build::
 
   make -j$(nproc) USE_CCACHE=y
 
-Full build with unit tests (matches what many contributors run locally
-before submitting changes)::
+Before submitting a pull request, compile with ``everything``, not only
+the main binary. Plain ``make`` does not build debug tools
+(``RunMapWindow`` and other ``Run*`` programs); include-order bugs often
+show up only there. ``everything check`` also runs the unit tests::
 
   make -j$(nproc) USE_CCACHE=y everything check
 

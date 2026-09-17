@@ -37,9 +37,8 @@ target:
 target internally. For example, ``TARGET=WAYLAND`` builds as ``UNIX`` with
 output under ``output/UNIX/bin/``, while ``TARGET=OPT`` also builds as ``UNIX``
 but uses a separate output directory (``output/OPT/bin/``).
-OpenGL Windows flavors (``WIN64OPENGL``, ``WIN32OPENGL``) compile as ``PC``
-(the internal MinGW toolchain name) but keep their own output directory
-(``output/WIN64OPENGL/``, etc.).
+Windows OpenGL builds (``WIN64OPENGL``, ``WIN32OPENGL``) keep their own output
+directory (``output/WIN64OPENGL/``, etc.).
 
 **Note**: In the examples below, ``output/UNIX/bin/`` is used (typical for Linux
 development). Replace ``UNIX`` with your flavor output directory if different
@@ -52,7 +51,8 @@ Building Run* Utilities
 
 These utilities are **not** built by plain ``make``; use the ``debug`` target
 (see :ref:`development-workflow` in :doc:`build`). They are defined in
-:file:`build/test.mk` and compiled as the ``debug`` make target.
+:file:`build/test.mk` and compiled as the ``debug`` make target. Before a
+pull request, build them with ``everything`` so they compile.
 
 To build all Run* utilities:
 

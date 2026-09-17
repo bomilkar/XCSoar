@@ -91,13 +91,13 @@ TEST_NAMES = \
 	TestValidity TestUTM \
 	TestAllocatedGrid \
 	TestRadixTree TestGeoBounds TestGeoClip \
-	TestLogger TestGRecord TestClimbAvCalc TestCirclingWind \
+	TestLogger TestGPSDeviceName TestGRecord TestClimbAvCalc TestCirclingWind \
 	TestFilteredVarioComputer \
 	TestVarioSynthesiser TestAudioVario \
 	TestWaypointReader TestThermalBase \
 	TestFlarmNet TestFlarmMessaging TestFlarmBinaryProtocol \
 	TestColorRamp TestXCThermBandQuery TestGeoPoint TestDiffFilter \
-	TestFileUtil TestRepository TestFileType TestPath TestPolars TestCSVLine TestGlidePolar \
+	TestFileUtil TestRepository TestFileType TestMarkdownCheckbox TestPath TestPolars TestCSVLine TestGlidePolar \
 	TestLXNAVPolarConversion \
 	test_replay_task TestProjection TestFlatPoint TestFlatLine TestFlatGeoPoint \
 	TestMacCready TestOrderedTask TestAATPoint TestTaskSave \
@@ -901,6 +901,14 @@ TEST_FILE_TYPE_SOURCES = \
 TEST_FILE_TYPE_DEPENDS = UTIL
 $(eval $(call link-program,TestFileType,TEST_FILE_TYPE))
 
+TEST_MARKDOWN_CHECKBOX_SOURCES = \
+	$(SRC)/util/MarkdownParser.cpp \
+	$(SRC)/RadioFrequency.cpp \
+	$(TEST_SRC_DIR)/tap.c \
+	$(TEST_SRC_DIR)/TestMarkdownCheckbox.cpp
+TEST_MARKDOWN_CHECKBOX_DEPENDS = UTIL
+$(eval $(call link-program,TestMarkdownCheckbox,TEST_MARKDOWN_CHECKBOX))
+
 TEST_DATA_LAYOUT_MIGRATION_SOURCES = \
 	$(SRC)/DataFileLayout.cpp \
 	$(SRC)/DataLayoutMigration.cpp \
@@ -1070,6 +1078,12 @@ TEST_LOGGER_SOURCES = \
 	$(TEST_SRC_DIR)/TestLogger.cpp
 TEST_LOGGER_DEPENDS = IO OS GEO MATH UTIL UNITS
 $(eval $(call link-program,TestLogger,TEST_LOGGER))
+
+TEST_GPS_DEVICE_NAME_SOURCES = \
+	$(TEST_SRC_DIR)/tap.c \
+	$(TEST_SRC_DIR)/TestGPSDeviceName.cpp
+TEST_GPS_DEVICE_NAME_DEPENDS = UTIL
+$(eval $(call link-program,TestGPSDeviceName,TEST_GPS_DEVICE_NAME))
 
 TEST_GRECORD_SOURCES = \
 	$(SRC)/Logger/GRecord.cpp \
