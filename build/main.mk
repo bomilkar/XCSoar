@@ -27,7 +27,7 @@ DIALOG_SOURCES = \
 	$(SRC)/Dialogs/DataManagement/AdvancedFileExplorer.cpp \
 	$(SRC)/Dialogs/DataManagement/StorageLocationPickerDialog.cpp \
 	$(SRC)/io/TarBackup.cpp \
-	$(SRC)/Dialogs/DataManagement/FileTransferUtil.cpp \
+	$(SRC)/io/BackupPaths.cpp \
 	$(SRC)/IGC/IgcMetaCache.cpp \
 	$(SRC)/Dialogs/Device/PortDataField.cpp \
 	$(SRC)/Dialogs/Device/PortPicker.cpp \
@@ -215,10 +215,11 @@ XCSOAR_SOURCES := \
 	$(SRC)/Task/TaskStore.cpp \
 	$(SRC)/Task/TypeStrings.cpp \
 	$(SRC)/Task/ValidationErrorStrings.cpp \
+	$(SRC)/Task/Summary.cpp \
 	\
-	$(SRC)/RadioFrequency.cpp \
-	$(SRC)/TransponderCode.cpp \
-	$(SRC)/TransponderMode.cpp \
+	$(SRC)/Radio/RadioFrequency.cpp \
+	$(SRC)/Radio/TransponderCode.cpp \
+	$(SRC)/Radio/TransponderMode.cpp \
 	\
 	$(SRC)/Engine/Navigation/TraceHistory.cpp \
 	$(SRC)/Engine/Navigation/Aircraft.cpp \
@@ -375,6 +376,7 @@ XCSOAR_SOURCES := \
 	$(SRC)/Renderer/AirspaceRenderer.cpp \
 	$(SRC)/Renderer/AirspaceRendererGL.cpp \
 	$(SRC)/Renderer/AirspaceRendererOther.cpp \
+	$(SRC)/Renderer/AirspaceLabelPlacement.cpp \
 	$(SRC)/Renderer/AirspaceLabelList.cpp \
 	$(SRC)/Renderer/AirspaceLabelRenderer.cpp \
 	$(SRC)/Renderer/AirspaceListRenderer.cpp \
