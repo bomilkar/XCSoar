@@ -113,7 +113,7 @@ TEST_NAMES = \
 	TestAirspaceLabelPlacement \
 	TestOGNAprsParser \
 	TestMETARParser \
-	TestIGCParser \
+	TestIGCParser TestIGCFlightTimes \
 	TestTraceBounds \
 	TestStrings TestUnescapeCString TestUTF8 TestWrapText TestLayout \
 	TestInputConfig \
@@ -246,6 +246,24 @@ TEST_IGC_PARSER_SOURCES = \
 	$(TEST_SRC_DIR)/TestIGCParser.cpp
 TEST_IGC_PARSER_DEPENDS = MATH UTIL
 $(eval $(call link-program,TestIGCParser,TEST_IGC_PARSER))
+
+TEST_IGC_FLIGHT_TIMES_SOURCES = \
+	$(SRC)/IGC/FlightTimes.cpp \
+	$(SRC)/IGC/IGCParser.cpp \
+	$(TEST_SRC_DIR)/FakeGeoid.cpp \
+	$(SRC)/Computer/FlyingComputer.cpp \
+	$(SRC)/Atmosphere/AirDensity.cpp \
+	$(SRC)/Engine/GlideSolvers/GlidePolar.cpp \
+	$(SRC)/Engine/Navigation/TraceHistory.cpp \
+	$(SRC)/Engine/Task/Stats/CommonStats.cpp \
+	$(SRC)/Engine/Task/Stats/ElementStat.cpp \
+	$(SRC)/Engine/Task/Stats/TaskStats.cpp \
+	$(SRC)/Engine/ThermalBand/ThermalBand.cpp \
+	$(SRC)/Engine/ThermalBand/ThermalSlice.cpp \
+	$(TEST_SRC_DIR)/tap.c \
+	$(TEST_SRC_DIR)/TestIGCFlightTimes.cpp
+TEST_IGC_FLIGHT_TIMES_DEPENDS = LIBNMEA OPERATION IO OS THREAD GEO MATH UTIL TIME UNITS
+$(eval $(call link-program,TestIGCFlightTimes,TEST_IGC_FLIGHT_TIMES))
 
 TEST_METAR_PARSER_SOURCES = \
 	$(SRC)/Weather/METARParser.cpp \
@@ -2646,6 +2664,7 @@ $(eval $(call link-program,RunFlightListRenderer,RUN_FLIGHT_LIST_RENDERER))
 RUN_PROGRESS_WINDOW_SOURCES = \
 	$(SRC)/Version.cpp \
 	$(MORE_SCREEN_SOURCES) \
+	$(SRC)/Formatter/ByteSizeFormatter.cpp \
 	$(SRC)/ProgressWindow.cpp \
 	$(SRC)/Gauge/LogoView.cpp \
 	$(TEST_SRC_DIR)/FakeAsset.cpp \
@@ -2658,6 +2677,7 @@ RUN_JOB_DIALOG_SOURCES = \
 	$(SRC)/Version.cpp \
 	$(SRC)/Job/Thread.cpp \
 	$(MORE_SCREEN_SOURCES) \
+	$(SRC)/Formatter/ByteSizeFormatter.cpp \
 	$(SRC)/ProgressWindow.cpp \
 	$(SRC)/Look/DialogLook.cpp \
 	$(SRC)/Look/ButtonLook.cpp \
@@ -2686,6 +2706,7 @@ RUN_ANALYSIS_SOURCES = \
 	$(SRC)/Task/ProtectedRoutePlanner.cpp \
 	$(SRC)/Task/RoutePlannerGlue.cpp \
 	$(SRC)/Waypoint/Factory.cpp \
+	$(SRC)/Waypoint/LastUsed.cpp \
 	$(SRC)/Radio/RadioFrequency.cpp \
 	$(SRC)/Math/Screen.cpp \
 	$(SRC)/Atmosphere/CuSonde.cpp \
@@ -2915,40 +2936,6 @@ DUMP_VARIO_SOURCES = \
 	$(TEST_SRC_DIR)/DumpVario.cpp
 DUMP_VARIO_DEPENDS = $(DEBUG_REPLAY_DEPENDS) AUDIO GEO MATH SCREEN EVENT UTIL OS TIME
 $(eval $(call link-program,DumpVario,DUMP_VARIO))
-
-RUN_TASK_EDITOR_DIALOG_SOURCES = \
-	$(SRC)/Airspace/ProtectedAirspaceWarningManager.cpp \
-	$(SRC)/Dialogs/Inflate.cpp \
-	$(SRC)/Dialogs/ComboPicker.cpp \
-	$(SRC)/Dialogs/HelpDialog.cpp \
-	$(SRC)/Dialogs/dlgTaskOverview.cpp \
-	$(SRC)/Dialogs/WaypointList.cpp \
-	$(SRC)/Dialogs/dlgWaypointDetails.cpp \
-	$(SRC)/Dialogs/dlgTaskWaypoint.cpp \
-	$(SRC)/Math/SunEphemeris.cpp \
-	$(SRC)/Airspace/AirspaceParser.cpp \
-	$(MORE_SCREEN_SOURCES) \
-	$(SRC)/Look/GlobalFonts.cpp \
-	$(SRC)/Task/ProtectedTaskManager.cpp \
-	$(SRC)/LocalPath.cpp \
-	$(SRC)/UtilsFont.cpp \
-	$(SRC)/Units/Units.cpp \
-	$(SRC)/Units/Settings.cpp \
-	$(SRC)/Units/Descriptor.cpp \
-	$(SRC)/Formatter/Units.cpp \
-	$(SRC)/Repository/FileType.cpp \
-	$(SRC)/Waypoint/WaypointGlue.cpp \
-	$(SRC)/Waypoint/Factory.cpp \
-	$(TEST_SRC_DIR)/FakeAsset.cpp \
-	$(TEST_SRC_DIR)/FakeDialogs.cpp \
-	$(TEST_SRC_DIR)/FakeLanguage.cpp \
-	$(TEST_SRC_DIR)/FakeLogFile.cpp \
-	$(TEST_SRC_DIR)/FakeProfile.cpp \
-	$(TEST_SRC_DIR)/FakeTerrain.cpp \
-	$(TEST_SRC_DIR)/RunTaskEditorDialog.cpp
-RUN_TASK_EDITOR_DIALOG_LDADD = $(FAKE_LIBS)
-RUN_TASK_EDITOR_DIALOG_DEPENDS = WAYPOINTFILE TASKFILE OPERATION FORM WIDGET DATA_FIELD SCREEN EVENT RESOURCE IO OS THREAD ZZIP UTIL GEO
-$(eval $(call link-program,RunTaskEditorDialog,RUN_TASK_EDITOR_DIALOG))
 
 TEST_NOTIFY_SOURCES = \
 	$(SRC)/Hardware/CPU.cpp \

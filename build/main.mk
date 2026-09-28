@@ -28,6 +28,7 @@ DIALOG_SOURCES = \
 	$(SRC)/Dialogs/DataManagement/StorageLocationPickerDialog.cpp \
 	$(SRC)/io/TarBackup.cpp \
 	$(SRC)/io/BackupPaths.cpp \
+	$(SRC)/IGC/FlightTimes.cpp \
 	$(SRC)/IGC/IgcMetaCache.cpp \
 	$(SRC)/Dialogs/Device/PortDataField.cpp \
 	$(SRC)/Dialogs/Device/PortPicker.cpp \
@@ -476,6 +477,7 @@ XCSOAR_SOURCES := \
 	$(SRC)/Hardware/RotateDisplay.cpp \
 	$(SRC)/Hardware/DisplayDPI.cpp \
 	$(SRC)/Hardware/DisplayGlue.cpp \
+	$(SRC)/Hardware/SystemPower.cpp \
 	$(SRC)/Hardware/Vibrator.cpp \
 	$(SRC)/Language/MOFile.cpp \
 	$(SRC)/Language/Language.cpp \
@@ -607,6 +609,7 @@ XCSOAR_SOURCES := \
 	$(SRC)/Monitor/TaskConstraintsMonitor.cpp \
 	$(SRC)/Monitor/TaskAdvanceMonitor.cpp \
 	$(SRC)/Monitor/MatTaskMonitor.cpp \
+	$(SRC)/Monitor/TrafficMonitor.cpp \
 	$(SRC)/Monitor/AllMonitors.cpp \
 	\
 	$(SRC)/Hardware/PowerGlobal.cpp \
@@ -660,6 +663,7 @@ XCSOAR_SOURCES += \
 	$(SRC)/Apple/PathProvider.cpp \
 	$(SRC)/Apple/InternalSensors.cpp \
 	$(SRC)/Apple/KeyboardDetection.cpp \
+	$(SRC)/Apple/Vibrator.cpp \
 	$(SRC)/Device/SmartDeviceSensors.cpp
 endif
 

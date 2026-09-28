@@ -1106,10 +1106,6 @@ msgstr "BLE 포트"
 msgid "Bluetooth server"
 msgstr "블루투스서버"
 
-msgid "GPS Intermediate Driver"
-msgstr "GPS중계드라이버"
-
-#, no-c-format
 msgid "Built-in GPS & sensors"
 msgstr "내장GPS&센서"
 
@@ -10874,3 +10870,17 @@ msgctxt "Setting"
 msgid "Manual"
 msgstr "수동"
 
+#, no-c-format
+msgid "Blood Oxygen"
+msgstr ""
+
+#, no-c-format
+msgid "SpO2"
+msgstr ""
+
+#, no-c-format
+msgid "Blood oxygen saturation in percent, from a Bluetooth pulse oximeter."
+msgstr ""
+
+msgid "Recently used waypoints"
+msgstr ""

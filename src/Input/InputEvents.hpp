@@ -121,6 +121,15 @@ processGesture(const char *data) noexcept;
 bool
 IsGesture(const char *data) noexcept;
 
+/**
+ * Returns the translated name of the action the given gesture
+ * triggers, e.g. the title of the dialog it opens, or nullptr if
+ * there is no such name (unknown gesture or action, or a Lua
+ * gesture).
+ */
+const char *
+GetGestureLabel(const char *data) noexcept;
+
 bool
 processNmea_real(unsigned key) noexcept;
 
@@ -217,6 +226,7 @@ void eventCredits(const char *misc);
 void eventDarkMode(const char *misc);
 void eventWeather(const char *misc);
 void eventQuickMenu(const char *misc);
+void eventArrangeInfoBoxes(const char *misc);
 void eventFileManager(const char *misc);
 void eventDataManagement(const char *misc);
 void eventExportFlights(const char *misc);

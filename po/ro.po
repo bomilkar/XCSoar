@@ -1114,10 +1114,6 @@ msgstr "Portul BLE"
 msgid "Bluetooth server"
 msgstr "Serviciu Bluetooth"
 
-msgid "GPS Intermediate Driver"
-msgstr "Driver Intermediar GPS"
-
-#, no-c-format
 msgid "Built-in GPS & sensors"
 msgstr "GPS integrat și senzori"
 
@@ -11160,3 +11156,17 @@ msgctxt "Setting"
 msgid "Manual"
 msgstr "Manual"
 
+#, no-c-format
+msgid "Blood Oxygen"
+msgstr ""
+
+#, no-c-format
+msgid "SpO2"
+msgstr ""
+
+#, no-c-format
+msgid "Blood oxygen saturation in percent, from a Bluetooth pulse oximeter."
+msgstr ""
+
+msgid "Recently used waypoints"
+msgstr ""

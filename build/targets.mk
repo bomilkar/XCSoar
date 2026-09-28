@@ -7,16 +7,12 @@ TARGETS = PC WIN64 \
 	ANDROID ANDROID7 ANDROID86 \
 	ANDROIDAARCH64 ANDROIDX64 \
 	ANDROIDFAT \
-	OSX64 MACOS IOS32 IOS64 IOS64SIM
+	MACOS IOS64 IOS64SIM
 
 ifeq ($(TARGET),)
   ifeq ($(HOST_IS_UNIX),y)
     ifeq ($(HOST_IS_DARWIN),y)
-      ifeq ($(HOST_IS_AARCH64),y)
-        TARGET = MACOS
-      else
-        TARGET = OSX64
-      endif
+      TARGET = MACOS
     else
       TARGET = UNIX
     endif
@@ -249,17 +245,6 @@ ifeq ($(TARGET),NEON)
   NEON := y
 endif
 
-ifeq ($(TARGET),OSX64)
-  override TARGET = UNIX
-  TARGET_IS_DARWIN = y
-  TARGET_IS_OSX = y
-  OSX_MIN_SUPPORTED_VERSION = 12.0
-  HOST_TRIPLET = x86_64-apple-darwin
-  LLVM_TARGET = $(HOST_TRIPLET)
-  CLANG = y
-  TARGET_ARCH += -mmacosx-version-min=$(OSX_MIN_SUPPORTED_VERSION)
-endif
-
 ifeq ($(TARGET),MACOS)
   override TARGET = UNIX
   TARGET_IS_DARWIN = y
@@ -273,20 +258,6 @@ ifeq ($(TARGET),MACOS)
   CLANG = y
   TARGET_ARCH += -mmacosx-version-min=$(OSX_MIN_SUPPORTED_VERSION)
   TARGET_IS_ARM = y
-endif
-
-ifeq ($(TARGET),IOS32)
-  override TARGET = UNIX
-  TARGET_IS_DARWIN = y
-  TARGET_IS_IOS = y
-  IOS_MIN_SUPPORTED_VERSION = 10.0
-  HOST_TRIPLET = armv7-apple-darwin
-  LLVM_TARGET = $(HOST_TRIPLET)
-  ifeq ($(HOST_IS_DARWIN),y)
-    DARWIN_SDK ?= /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk
-  endif
-  CLANG = y
-  TARGET_ARCH += -miphoneos-version-min=$(IOS_MIN_SUPPORTED_VERSION)
 endif
 
 ifeq ($(TARGET),IOS64)

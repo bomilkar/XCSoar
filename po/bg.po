@@ -1113,10 +1113,6 @@ msgstr "BLE порт"
 msgid "Bluetooth server"
 msgstr "Bluetooth сървър"
 
-msgid "GPS Intermediate Driver"
-msgstr "Междинен драйвер за ГПС"
-
-#, no-c-format
 msgid "Built-in GPS & sensors"
 msgstr "Вграден ГПС и други датчици"
 
@@ -11217,3 +11213,17 @@ msgctxt "Setting"
 msgid "Manual"
 msgstr "Ръчно"
 
+#, no-c-format
+msgid "Blood Oxygen"
+msgstr ""
+
+#, no-c-format
+msgid "SpO2"
+msgstr ""
+
+#, no-c-format
+msgid "Blood oxygen saturation in percent, from a Bluetooth pulse oximeter."
+msgstr ""
+
+msgid "Recently used waypoints"
+msgstr ""

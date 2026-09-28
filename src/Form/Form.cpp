@@ -297,8 +297,9 @@ WndForm::ShowModal()
         continue;
 
 #ifdef ENABLE_SDL
-      if (event.GetKeyCode() == SDLK_TAB) {
-        /* the Tab key moves the keyboard focus */
+      if (event.GetKeyCode() == SDLK_TAB && !CheckKey(this, event)) {
+        /* the Tab key moves the keyboard focus, unless the focused
+           control handles it itself */
         const Uint8 *keystate = ::SDL_GetKeyboardState(nullptr);
         event.event.key.keysym.sym =
             keystate[SDL_SCANCODE_LSHIFT] || keystate[SDL_SCANCODE_RSHIFT]
@@ -366,7 +367,7 @@ WndForm::OnPaint(Canvas &canvas) noexcept
 #ifdef ENABLE_OPENGL
   if (!IsDithered() && !IsMaximised() && is_active)
     /* draw a soft shadow around the current dialog to emphasise it */
-    DrawBoxShadow(GetClientRect());
+    DrawBoxShadow(GetClientRect(), BoxShadowStyle::DIALOG);
 #endif
 
   ContainerWindow::OnPaint(canvas);

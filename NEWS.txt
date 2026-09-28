@@ -1,12 +1,16 @@
 Version 7.46 - not yet released
 * android
   - target Android 16 so Google Play still accepts updates #2874
+  - use built-in IMU and log to NMEA logger if enabled
   - hide Engine Type on BLE sensors that are not an engine sensor
     (for example a heart-rate band)
   - show remaining battery in the Devices list for BLE sensors
     that expose the standard Battery Service #3157
   - read BLE Environmental Sensing pressure, temperature, and
     humidity #3156
+  - read blood oxygen saturation from a Bluetooth pulse oximeter
+    and show it in the Blood Oxygen InfoBox #1836
+  - show Blood Oxygen in the Devices list for BLE pulse oximeters
   - fix BLE heart-rate sensors (for example Xiaomi Smart Band)
     timing out and then showing Not connected
   - fix crash when exiting the app #2873
@@ -18,6 +22,8 @@ Version 7.46 - not yet released
     cannot open the serial UART; choose BLE port and the BlueFly
     driver #3146
 * iOS
+  - add haptic feedback for button presses; the Haptic feedback
+    setting controls it
   - use the system keyboard for text entry so special characters
     can be typed, and add a Paste button for the clipboard; the
     Keyboard text-input style keeps XCSoar's own grid #2894
@@ -34,14 +40,20 @@ Version 7.46 - not yet released
 * Windows
   - show the program version in the file properties of XCSoar.exe and
     the installer #3173
+  - show --help and --version in the Command Prompt window #3194
   - remove the legacy single-file Windows executable; use the OpenGL
     version (installer or zip) #2132
 * Linux
+  - add restart and power-off controls to the Quit dialog
   - use OpenGL ES instead of desktop OpenGL #2140
   - termination: fix SIGTERM and Ctrl-C killing the program instead of
     shutting it down, which lost the settings and the flight log that
     are written on exit
+  - fix temporary freezing the display when moving the mouse on Cubieboards
+    (OpenVario) when XCSoar runs on DRM/KMS (text console without graphical
+    GUI framework), particularly on high-resolution monitors. #3177    
 * Kobo
+  - add restart and power-off controls to the Quit dialog
   - fix the power-off screen not listing flights after flights.log
     moved into the logs directory #3001
 * input
@@ -65,6 +77,8 @@ Version 7.46 - not yet released
     silently switching back to None
   - fix UK XC Therm forecast overlays (met-ukv model and layer
     catalog) #3029
+  - fix RASP Auto update downloading again on every page switch
+    because the file date stayed at the first download #3166
 * map
   - use Vario #2 snail trail colours by default so climb and sink
     stand out on typical terrain #2988
@@ -114,13 +128,36 @@ Version 7.46 - not yet released
   - fix IGC downloads from LX Navigation loggers (Colibri, LX20,
     LX7007 IGC) showing about 65000 m for negative pressure
     altitudes #3075
+  - fix LXNAV S-series flight download aborting after valid rows when
+    the same 50-line block had already used its retries, and pause
+    periodic vario sentences during the download #3201
+  - wait for the LXNAV product reply before choosing a flight-list
+    protocol, so an S-series logger is not sent Colibri commands
+    while it is still identifying
 * dialogs
+  - show the flight name, the device, and the driver on separate
+    lines above a flight download, and the percent, amount complete,
+    transfer speed, and estimated time remaining inside the progress
+    bar
   - show Heart Rate as a Devices list sensor flag when a device
     reports it
   - show Pressure, Temperature, and Relative humidity as Devices
     list sensor flags when a device reports them
   - remember checklist checkbox ticks until XCSoar exits or a
     different checklist file is selected
+  - toggle a Markdown checkbox from a tap on its line. A link on
+    that line, such as a VHF frequency, still opens the link
+  - show detected takeoff, landing and duration in the flight export
+    list as newest flights are scanned in the background
+  - let WeGlide Upload send the highlighted IGC file from that list
+    with the Upload Flight button, showing takeoff, landing and
+    duration as the file is scanned
+  - let Replay choose one IGC or NMEA log from that list, showing
+    takeoff, landing and duration for each IGC file
+  - show the flight count and total time as hours:minutes for IGC
+    files with a detected launch and landing under the flight export,
+    WeGlide Upload and Replay lists as the scan finishes
+  - keep message dialogs usable when the application window is resized
   - fix NOTAM details text being truncated and unable to scroll #2943
   - put the Close button on the right of the Status and Weather
     tab strips
@@ -141,7 +178,23 @@ Version 7.46 - not yet released
     long
   - let Left/Right still change settings pages on Services until Up
     selects a service action
+  - fix the Waypoint List (DR gesture) losing its filter after the
+    recently used waypoints (LU gesture) were opened #3207
+  - filter only the recently used waypoints in the LU gesture list,
+    and add waypoints selected with Goto to it #3207
 * infoboxen
+  - rearrange the InfoBoxes of a page by dragging one onto another;
+    a long press and lift opens that mode with the box selected;
+    sliding off cancels; a tap explains a card, a short move
+    picks it up, and a hold then lift opens the list; the Quick
+    Menu opens the mode without picking a box up; the cursor keys
+    and a remote stick leave the cards toward Help and Close; the
+    overlay uses the same colours as the InfoBox set dialog
+  - vibrate on an InfoBox press, and more strongly once a hold
+    is armed, on devices with haptic feedback
+  - compose the InfoBox sets in the configuration with the same view:
+    every InfoBox is a card which can be moved around; Copy Set, Paste
+    Set and Rename are the dialog buttons
   - pack portrait InfoBoxes on tall screens so title, value, and
     comment sit closer together; InfoBox title size still grows the
     boxes toward square at 150%
@@ -152,6 +205,10 @@ Version 7.46 - not yet released
   - show no wind in the T Next Leg comment when the box is blank
     because wind is not available
 * ui
+  - stop quitting the simulator when the device battery falls below 5%
+  - remove the Free RAM InfoBox from the picker; it has shown no value
+    since Windows CE support ended. A layout that still selects it
+    stays blank
   - Support manual UTC offsets up to +14:00 in 15-minute increments
   - Keep automatic UTC offsets synchronized with the operating-system
     time zone, including daylight-saving and travel changes
@@ -159,6 +216,16 @@ Version 7.46 - not yet released
     local time; XCSoar then knows the daylight-saving rules and switches
     on its own, which is the only way to get that on Kobo, where the
     device has no time zone setting at all
+  - vibrate on a recognised map gesture, and when a check box,
+    settings field, tab, digit, list item, or scroll bar is pressed
+  - add a distinct haptic pattern for pop-up messages, airspace
+    warnings, and FLARM collision alarms
+  - draw the gesture and swipe trail as a smooth red line with a
+    soft shadow, slightly transparent until the gesture is recognised
+  - while a gesture is drawn, show a label with the name of the
+    action it triggers
+  - vibrate lightly while a gesture is drawn when it turns into another
+    known gesture, for example from Analysis to Pan
   - keep pan-mode menu buttons about 20 mm tall on tall phones,
     large enough for a gloved tap
   - size the Wayland UI from the output's physical size, and draw at
@@ -188,6 +255,8 @@ Version 7.46 - not yet released
   - fix Dark mode Auto on macOS and iOS always staying light: follow
     the system appearance, including a scheduled switch while XCSoar
     is running
+  - fix quitting from the Fly / Simulator screen with -profile=
+    emptying the profile file #3190
 * documentation
   - document that a BlueFly Vario on Android uses BLE port, not BLE
     sensor
@@ -198,18 +267,38 @@ Version 7.46 - not yet released
     Devices list
   - document Pressure, Temperature, and Relative humidity on the
     Devices list
+  - document Bluetooth pulse oximeters and the Blood Oxygen InfoBox
   - document that checklist checkbox ticks last until XCSoar exits
   - drop Windows CE and Windows Mobile from the manuals; list iOS
     and macOS among the supported platforms, the built-in barometer
     on Android and iOS, and the Android accelerometer as a G-sensor;
     Windows installs use the OpenGL 64-bit or 32-bit package
+  - describe background takeoff, landing and duration detection in the
+    flight export list
+  - describe WeGlide Upload as that IGC list, with takeoff and
+    landing times, and the Upload Flight button for the highlighted
+    flight
+  - describe the Replay file list of IGC and NMEA logs, with takeoff
+    and landing times for IGC files
+  - describe the flight count and total time as hours:minutes, for
+    flights with a detected launch and landing, under the flight
+    export, WeGlide Upload and Replay lists
+  - document Linux restart and power-off controls
   - document 15-minute UTC offset selection
   - describe the T Next Leg InfoBox, how to use it at a turn, and that
     the comment shows no wind when the box is blank because wind is
     missing
+  - describe how to rearrange the InfoBoxes, and correct how the
+    InfoBox dialogue is opened
   - describe airspace fill as a transparent colour, without hatch
     patterns or the Airspace transparency setting
+  - describe the gesture trail, its label and its vibration
 * development
+  - build system: keep each CI target's download cache to itself; a
+    bare downloads-$os- restore key handed one target another
+    target's cache, without the files it needed
+  - drop the Windows CE GPS Intermediate Driver port type and the
+    unused HAVE_CE pkg-config path
   - build system: package Android APK and AAB from one
     aapt2/bundletool pipeline and one CI job #2021
   - build system: embed VERSIONINFO in XCSoar.exe and the NSIS

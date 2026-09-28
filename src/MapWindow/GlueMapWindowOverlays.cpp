@@ -19,6 +19,7 @@
 #include "util/Macros.hpp"
 #include "util/StringAPI.hxx"
 #include "Look/GestureLook.hpp"
+#include "Renderer/GestureRenderer.hpp"
 #include "Input/InputEvents.hpp"
 #include "Renderer/MapScaleRenderer.hpp"
 #include "Components.hpp"
@@ -65,18 +66,28 @@ GlueMapWindow::DrawGesture(Canvas &canvas) const noexcept
     return;
 
   const char *gesture = gestures.GetGesture();
-  if (gesture != nullptr && !InputEvents::IsGesture(gesture))
-    canvas.Select(gesture_look.invalid_pen);
-  else
-    canvas.Select(gesture_look.pen);
+  const bool valid = gesture == nullptr || InputEvents::IsGesture(gesture);
 
-  canvas.SelectHollowBrush();
+  GestureRenderer::Draw(canvas, gesture_look, gestures.GetPoints(), valid);
 
-  const auto &points = gestures.GetPoints();
-  auto it = points.begin();
-  auto it_last = it++;
-  for (auto it_end = points.end(); it != it_end; it_last = it++)
-    canvas.DrawLinePiece(*it_last, *it);
+  /* name the action which lifting the finger now would trigger */
+  const char *label = gesture != nullptr
+    ? InputEvents::GetGestureLabel(gesture)
+    : nullptr;
+  if (label == nullptr)
+    return;
+
+  canvas.Select(*look.overlay.overlay_font);
+
+  const PixelRect rc = GetClientRect();
+
+  TextInBoxMode mode;
+  mode.shape = LabelShape::PILL;
+  mode.align = TextInBoxMode::Alignment::CENTER;
+  mode.move_in_view = true;
+
+  TextInBox(canvas, label, {rc.GetCenter().x, rc.top + Layout::Scale(12)},
+            mode, rc);
 }
 
 void
