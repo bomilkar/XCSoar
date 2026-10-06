@@ -8,10 +8,13 @@
 namespace ProfileKeys {
 
 constexpr std::string_view FullScreen = "FullScreen";
+constexpr std::string_view InfoBoxAreaStretch = "InfoBoxAreaStretch";
+constexpr std::string_view StatusBar = "StatusBar";
 constexpr std::string_view UIScale = "UIScale";
 constexpr std::string_view CustomDPI = "CustomDPI";
 constexpr std::string_view DarkMode = "DarkMode";
 constexpr std::string_view DisplayType = "DisplayType";
+constexpr std::string_view DownloadAreaFilter = "DownloadAreaFilter";
 constexpr std::string_view Password = "Password";
 constexpr std::string_view AirspaceWarning = "AirspaceWarn";
 constexpr std::string_view AirspaceWarningDialog = "AirspaceWarnDialog";
@@ -176,6 +179,7 @@ constexpr std::string_view TurnpointRadius = "TurnpointRadius";
 constexpr std::string_view FinishType = "FinishType";
 constexpr std::string_view FinishRadius = "FinishRadius";
 constexpr std::string_view TaskType = "TaskType";
+constexpr std::string_view NavigateNearest = "NavigateNearest";
 constexpr std::string_view AATMinTime = "AATMinTime";
 constexpr std::string_view AATTimeMargin = "AATTimeMargin";
 constexpr std::string_view PEVStartWaitTime = "PEVStartWaitTime";
@@ -356,6 +360,8 @@ constexpr std::string_view GDL90UseSystemUtcDate = "GDL90UseSystemUtcDate";
 
 constexpr std::string_view HideQuickGuideDialogOnStartup =
   "HideQuickGuideDialogOnStartup";
+constexpr std::string_view HideRadarStaleWarning =
+  "HideRadarStaleWarning";
 constexpr std::string_view DisclaimerAcknowledgedVersion =
   "DisclaimerAcknowledgedVersion";
 constexpr std::string_view LastSeenNewsVersion =

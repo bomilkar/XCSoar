@@ -19,12 +19,13 @@
 enum ControlIndex {
   ArrivalHeight,
   TerrainHeight,
+  SPACER_LANDING,
   AlternateMode,
+  SPACER_POLAR,
   PolarDegradation,
   AutoBugs,
   SafetyMC,
   RiskFactor,
-  TurnBackMarker,
 };
 
 class SafetyFactorsConfigPanel final : public RowFormWidget {
@@ -57,6 +58,8 @@ SafetyFactorsConfigPanel::Prepare(ContainerWindow &parent,
            0, 1000, 10, false,
            UnitGroup::ALTITUDE, task_behaviour.route_planner.safety_height_terrain);
 
+  AddSpacer();
+
   static constexpr StaticEnumChoice abort_task_mode_list[] = {
     { AbortTaskMode::SIMPLE, N_("Simple"),
       N_("Reachable airfields are listed first (nearest at top), then "
@@ -74,6 +77,9 @@ SafetyFactorsConfigPanel::Prepare(ContainerWindow &parent,
           _("Determines sorting of alternates in the alternates dialog "
             "and in abort mode."),
           abort_task_mode_list, (unsigned)task_behaviour.abort_task_mode);
+
+  AddSpacer();
+  SetExpertRow(SPACER_POLAR);
 
   AddFloat(_("Polar degradation"), /* xgettext:no-c-format */
            _("A permanent polar degradation. "
@@ -104,15 +110,6 @@ SafetyFactorsConfigPanel::Prepare(ContainerWindow &parent,
            0, 1, 0.1, false,
            task_behaviour.risk_gamma);
   SetExpertRow(RiskFactor);
-
-  AddBoolean(C_("Setting", "Turn back marker"),
-             _("Show a green triangle on the map along the current track "
-               "indicating the furthest point from which the active task "
-               "waypoint or Goto target can still be reached with the "
-               "current altitude and conditions. "
-               "The triangle is only shown during cruise when the target "
-               "is reachable."),
-             task_behaviour.turn_back_marker_enabled);
 }
 
 bool
@@ -157,11 +154,6 @@ SafetyFactorsConfigPanel::Save(bool &_changed) noexcept
   if (SaveValue(RiskFactor, task_behaviour.risk_gamma)) {
     Profile::Set(ProfileKeys::RiskGamma,
                  iround(task_behaviour.risk_gamma * 10));
-    changed = true;
-  }
-
-  if (SaveValue(TurnBackMarker, task_behaviour.turn_back_marker_enabled)) {
-    Profile::Set(ProfileKeys::TurnBackMarkerEnabled, task_behaviour.turn_back_marker_enabled);
     changed = true;
   }
 

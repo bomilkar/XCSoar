@@ -40,9 +40,24 @@ class FlarmDevice: public AbstractDevice
    */
   DeviceSettingsMap<std::string> settings;
 
+private:
+  bool is_power_flarm = false;
+
 public:
   FlarmDevice(Port &_port)
     :port(_port) {}
+
+  /**
+   * Sets the PowerFLARM device capabilities status.
+   */
+  void SetPowerFlarm(bool state) { is_power_flarm = state; }
+
+  /**
+   * Checks if the connected hardware features PowerFLARM capabilities.
+   *
+   * @return True if task declaration limits can safely be bypassed.
+   */
+  bool IsPowerFlarm() const { return is_power_flarm; }
 
   /**
    * Write a setting to the FLARM.
@@ -128,6 +143,13 @@ public:
                            OperationEnvironment &env);
   bool SetCompetitionClass(const char *competition_class,
                            OperationEnvironment &env);
+
+  /**
+   * Read PFLAC DEVTYPE.  Stops the port thread first, so the answer
+   * is not consumed by the NMEA parser.
+   */
+  bool ReadDeviceType(char *buffer, size_t length,
+                      OperationEnvironment &env);
 
   bool GetStealthMode(bool &enabled, OperationEnvironment &env);
   bool SetStealthMode(bool enabled, OperationEnvironment &env);
@@ -261,6 +283,22 @@ private:
    */
   bool BinaryPing(OperationEnvironment &env,
                   std::chrono::steady_clock::duration timeout);
+
+  enum class BinaryPingResult : uint8_t {
+    ACK,
+    REFUSED,
+    TIMEOUT,
+  };
+
+  /**
+   * Binary ping that also watches @p matcher.  A completed
+   * "$PFLAX,A,ERROR,NOTSUPPORTED" sentence is REFUSED; the device
+   * stayed in NMEA and further binary frames will not be answered.
+   */
+  BinaryPingResult
+  BinaryPingWatch(OperationEnvironment &env,
+                  std::chrono::steady_clock::duration timeout,
+                  FLARM::PFLAXNotSupportedMatcher &matcher);
 
   /**
    * "Resets the device. The only way to resume normal operation."
