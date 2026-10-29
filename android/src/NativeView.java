@@ -21,6 +21,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.net.Uri;
 import android.content.Intent;
+import android.content.ClipData;
 import android.content.Context;
 import android.content.res.Resources;
 import android.content.res.Configuration;
@@ -28,6 +29,8 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.provider.Settings;
 import android.webkit.MimeTypeMap;
+
+import java.util.ArrayList;
 
 class EGLException extends Exception {
   private static final long serialVersionUID = 5928634879321047581L;
@@ -438,7 +441,6 @@ class NativeView extends SurfaceView
     final Context context = getContext();
 
     android.graphics.Rect r = getHolder().getSurfaceFrame();
-    android.util.Log.d(TAG, "runNative: getSurfaceFrame() size=" + r.width() + "x" + r.height());
     DisplayMetrics metrics = new DisplayMetrics();
     /* Physical display size and xdpi/ydpi; getMetrics() can follow reduced
        application window metrics on some devices (XCSoar #1784). */
@@ -460,7 +462,9 @@ class NativeView extends SurfaceView
       try {
         runNative(context, permissionManager,
                   r.width(), r.height(),
+                  metrics.widthPixels, metrics.heightPixels,
                   (int)metrics.xdpi, (int)metrics.ydpi,
+                  metrics.densityDpi,
                   Build.PRODUCT);
       } finally {
         /* Set shutdown flag before stopping service so it does not
@@ -535,10 +539,31 @@ class NativeView extends SurfaceView
 
   static native String onReceiveXCTrackTask(String data);
 
+  /**
+   * Hand the raw text of a scanned QR code to native code, which
+   * inspects the URI scheme prefix itself.
+   *
+   * @return null on success, or a human-readable error message
+   */
+  static native String onReceiveTaskQRCode(String text);
+
+  /**
+   * Open the camera to scan a task QR code.  Called from native code
+   * when the pilot picks "Scan QR Code".  The scanner Activity
+   * reports its own result, so there is nothing to return here.
+   */
+  void scanQRCode() {
+    final Context ctx = getContext();
+    if (ctx instanceof XCSoar) {
+      ((XCSoar) ctx).scanQRCode();
+    }
+  }
+
   protected native void runNative(Context context,
                                   PermissionManager permissionManager,
                                   int width, int height,
-                                  int xdpi, int ydpi,
+                                  int displayWidth, int displayHeight,
+                                  int xdpi, int ydpi, int densityDpi,
                                   String product);
 
   protected native void resizedNative(int width, int height,
@@ -629,6 +654,62 @@ class NativeView extends SurfaceView
 
     Intent share = Intent.createChooser(send, null);
     getContext().startActivity(share);
+  }
+
+  /**
+   * Share one or more files from the XCSoar data directory via the
+   * system share sheet (Quick Share / Nearby Share appear as targets).
+   *
+   * @param relativePaths paths relative to the data directory
+   *   (e.g. {@code "logs/foo.igc"}).
+   */
+  private void shareFiles(String[] relativePaths) {
+    if (relativePaths == null || relativePaths.length == 0)
+      return;
+
+    final String authority = getContext().getPackageName();
+    ArrayList<Uri> uris = new ArrayList<>(relativePaths.length);
+    for (String rel : relativePaths) {
+      if (rel == null || rel.isEmpty())
+        continue;
+
+      Uri uri = new Uri.Builder()
+        .scheme("content")
+        .authority(authority)
+        .encodedPath("/files/" + Uri.encode(rel, "/"))
+        .build();
+      uris.add(uri);
+    }
+
+    if (uris.isEmpty())
+      return;
+
+    try {
+      Intent send = new Intent();
+      if (uris.size() == 1) {
+        send.setAction(Intent.ACTION_SEND);
+        send.putExtra(Intent.EXTRA_STREAM, uris.get(0));
+        String mime = getContext().getContentResolver().getType(uris.get(0));
+        send.setType(mime != null ? mime : "application/octet-stream");
+      } else {
+        send.setAction(Intent.ACTION_SEND_MULTIPLE);
+        send.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
+        send.setType("*/*");
+      }
+
+      ClipData clip = ClipData.newUri(getContext().getContentResolver(),
+                                      "XCSoar", uris.get(0));
+      for (int i = 1; i < uris.size(); ++i)
+        clip.addItem(new ClipData.Item(uris.get(i)));
+      send.setClipData(clip);
+      send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+      Intent share = Intent.createChooser(send, null);
+      share.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      getContext().startActivity(share);
+    } catch (Exception e) {
+      Log.e(TAG, "shareFiles() error", e);
+    }
   }
 
   /**

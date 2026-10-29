@@ -24,7 +24,6 @@
 #include "Language/Language.hpp"
 #include "Widget/RowFormWidget.hpp"
 #include "UIGlobals.hpp"
-#include "UtilsSettings.hpp"
 #include "Asset.hpp"
 #include "util/Macros.hpp"
 #include "util/StaticString.hxx"
@@ -349,11 +348,20 @@ DisplayConfigPanel::Save(bool &_changed) noexcept
                     ui_settings.display.display_type)) {
     changed = true;
     SetDisplayType(ui_settings.display.display_type);
+    /* Reload 1-bit vs anti-aliased glyphs (Kobo mono path). */
+    CommonInterface::main_window->Initialise();
+    CommonInterface::main_window->ReinitialiseLook();
   }
 
   if (SaveValueEnum(CustomDPI, ProfileKeys::CustomDPI,
-                    ui_settings.custom_dpi))
-    require_restart = changed = true;
+                    ui_settings.custom_dpi)) {
+    changed = true;
+    if (CommonInterface::main_window != nullptr) {
+      CommonInterface::main_window->Initialise();
+      CommonInterface::main_window->ReinitialiseLook();
+      CommonInterface::main_window->ReinitialiseLayout();
+    }
+  }
 
   if (Display::RotateSupported() &&
       SaveValueEnum(Orientation, ProfileKeys::MapOrientation,

@@ -101,6 +101,7 @@ handle_toplevel_configure(void *data,
   auto *window = static_cast<TopWindow *>(data);
 
   bool suspended = false;
+  bool resizable = true;
   const auto *state = static_cast<const uint32_t *>(states->data);
   const auto *const states_end =
     state + states->size / sizeof(uint32_t);
@@ -111,13 +112,19 @@ handle_toplevel_configure(void *data,
       suspended = true;
       break;
 #endif
+    case XDG_TOPLEVEL_STATE_FULLSCREEN:
+    case XDG_TOPLEVEL_STATE_MAXIMIZED:
+      resizable = false;
+      break;
     default:
       break;
     }
   }
 
-  if (event_queue != nullptr)
+  if (event_queue != nullptr) {
     event_queue->SetToplevelState(suspended);
+    event_queue->SetResizeEnabled(resizable);
+  }
 
   window->OnToplevelConfigureSize(width, height);
 }
@@ -198,6 +205,17 @@ handle_preferred_buffer_transform([[maybe_unused]] void *data,
 {
 }
 #endif
+
+static void
+handle_frame_done(void *data, struct wl_callback *callback,
+                  [[maybe_unused]] uint32_t time) noexcept
+{
+  static_cast<TopWindow *>(data)->OnFrameDone(callback);
+}
+
+static const struct wl_callback_listener frame_listener = {
+  .done = handle_frame_done,
+};
 
 static const struct wl_surface_listener wl_surface_output_listener = {
   .enter = handle_surface_enter,
@@ -285,6 +303,8 @@ TopWindow::CreateNative(const char *text, PixelSize size,
 
     xdg_toplevel = xdg_surface_get_toplevel(xdg_surface);
     xdg_toplevel_add_listener(xdg_toplevel, &toplevel_listener, this);
+    if (event_queue != nullptr)
+      event_queue->SetResizeToplevel(xdg_toplevel);
     xdg_toplevel_set_title(xdg_toplevel, text);
     xdg_toplevel_set_app_id(xdg_toplevel, "xcsoar");
 
@@ -366,6 +386,42 @@ TopWindow::DisableCapture() noexcept
 }
 
 void
+TopWindow::ArmFrameCallback() noexcept
+{
+  if (wl_surface == nullptr || frame_callback != nullptr)
+    return;
+
+  frame_callback = wl_surface_frame(wl_surface);
+  if (frame_callback == nullptr)
+    return;
+
+  wl_callback_add_listener(frame_callback, &frame_listener, this);
+}
+
+void
+TopWindow::OnFrameDone(struct wl_callback *callback) noexcept
+{
+  if (frame_callback != callback)
+    return;
+
+  frame_callback = nullptr;
+  wl_callback_destroy(callback);
+
+  if (event_queue != nullptr)
+    event_queue->Push(Event::EXPOSE);
+}
+
+void
+TopWindow::ClearFrameCallback() noexcept
+{
+  if (frame_callback == nullptr)
+    return;
+
+  wl_callback_destroy(frame_callback);
+  frame_callback = nullptr;
+}
+
+void
 TopWindow::DestroyNative() noexcept
 {
   if (confined_pointer != nullptr) {
@@ -388,6 +444,8 @@ TopWindow::DestroyNative() noexcept
     zxdg_toplevel_decoration_v1_destroy(xdg_decoration);
     xdg_decoration = nullptr;
   }
+  if (event_queue != nullptr)
+    event_queue->SetResizeToplevel(nullptr);
   if (xdg_toplevel != nullptr) {
     xdg_toplevel_destroy(xdg_toplevel);
     xdg_toplevel = nullptr;
@@ -396,6 +454,7 @@ TopWindow::DestroyNative() noexcept
     xdg_surface_destroy(xdg_surface);
     xdg_surface = nullptr;
   }
+  ClearFrameCallback();
   if (wl_surface != nullptr) {
     wl_surface_destroy(wl_surface);
     wl_surface = nullptr;
@@ -558,7 +617,8 @@ TopWindow::OnResize(PixelSize new_size) noexcept
 
   if (screen != nullptr) {
     Invalidate();
-    if (screen->IsReady() && IsVisible()) {
+    if (screen->IsReady() && IsVisible() && !IsFramePending()) {
+      ArmFrameCallback();
       Expose();
       const auto now = std::chrono::steady_clock::now();
       const auto time_since_last_flush =

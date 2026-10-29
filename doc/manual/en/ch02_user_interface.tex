@@ -556,10 +556,11 @@ The screen uses the same backdrop as the InfoBox set dialog, with the
 map still showing through, and every InfoBox is replaced by a card
 showing only its number and its caption.
 On Android the backdrop still covers the screen.  The cards, the
-description and the buttons are laid out below the area that opens
-the notification shade, so a downward drag stays in XCSoar.  The
-InfoBox Sets editor uses the same layout.  The InfoBoxes on the map
-stay where they are.
+description and the buttons stay clear of the screen edge, the camera
+cutout and the system bars, and below the area that opens the
+notification shade, so a drag stays in XCSoar.  The InfoBox Sets
+editor uses the same layout.  The InfoBoxes on the map stay where
+they are.
 
 A tap on a card explains what that InfoBox shows.  Drag it onto
 another one to exchange the two; the InfoBox which makes way slides
@@ -654,7 +655,8 @@ Dialogues are typically started from the button menu.
 Many of the dialogue windows have multiple pages of information and are controlled
 in a consistent fashion. Press the \bmenuw{$<$} or \bmenuw{$>$} buttons to
 select the next or previous page of the dialogue and the \bmenuw{Close} button 
-to make the dialogue disappear.
+to make the dialogue disappear. The \bmenuw{$<$} button is unavailable
+on the first page.
 
 The escape key on a PC can also be used to close dialogues.
 
@@ -717,8 +719,9 @@ up/down keys may be used to scroll through the text. Clicking the
 \bmenuw{$<$} and \bmenuw{$>$} buttons selects the previous/next
 checklist.  Tapping the text of a checkbox line toggles it.  A link
 on that line, such as a VHF frequency, still opens the link.
-Checkbox ticks stay until you leave XCSoar or choose a
-different checklist file. Editing a page's text clears its saved ticks.
+Checkbox ticks come back when an unfinished flight is restored.
+Choosing a different checklist file clears them, and editing a
+page's text clears that page's ticks.
 
 
 \subsection*{Text entry} \label{sec:textentry}

@@ -69,7 +69,7 @@ GetWelcomeText(bool dark_mode)
     "%s\n\n"
     "%s\n\n"
     "- [https://xcsoar.org](https://xcsoar.org)\n"
-    "- [%s](https://xcsoar.org/discover/manual.html)\n"
+    "- [%s](https://xcsoar.org/docs/#manual)\n"
     "- [%s](https://github.com/XCSoar/XCSoar)\n"
     "- [%s](https://github.com/XCSoar/XCSoar/discussions)",
     dark_mode ? "IDB_TITLE_HD_WHITE" : "IDB_TITLE_HD",
@@ -182,6 +182,8 @@ SafetyFactorsDifferFromDefaults() noexcept
   if (std::abs(p.degradation_factor - d_pol.degradation_factor) > eps)
     return true;
   if (p.auto_bugs != d_pol.auto_bugs)
+    return true;
+  if (std::abs(t.task_mc - d_task.task_mc) > eps)
     return true;
   if (std::abs(t.safety_mc - d_task.safety_mc) > eps)
     return true;

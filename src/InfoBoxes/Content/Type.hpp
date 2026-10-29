@@ -18,7 +18,7 @@ namespace InfoBoxFactory
     e_TL_Gain, /* Total altitude gain/loss in the last thermal */
     e_TL_Time, /* Time spent circling in the last thermal */
     /* 10..19 */
-    e_MacCready, /* The current MacCready setting and whether it is manual or auto. The comment is the MacCready speed-to-fly. At MacCready 0, with a task or Goto active, that speed is adjusted for wind toward the waypoint. (Touchscreen/PC only) Also used to adjust the MacCready setting if the infobox is active, by using the up/down cursor keys */
+    e_MacCready, /* The current MacCready setting and whether it is manual or auto. The comment is the MacCready speed-to-fly. At MacCready 0, with a task or Goto active, that speed is adjusted for wind toward the waypoint. In task abort the title and the value are Safety MC, and the comment is the glide ratio at that setting. (Touchscreen/PC only) Also used to adjust the MacCready setting if the infobox is active, by using the up/down cursor keys */
     e_WP_Distance, /* The distance to the currently selected waypoint. For AAT tasks, this is the distance to the target within the AAT sector */
     e_WP_AltDiff, /* Next Altitude Difference - Arrival altitude at the next waypoint relative to the safety arrival height */
     e_WP_AltReq, /* Additional altitude required to reach the next turn point */
@@ -66,7 +66,7 @@ namespace InfoBoxFactory
     e_Fin_AA_Distance, /* Assigned Area Task distance around target points for remainder of task */
     e_AA_SpeedAvg, /* Assigned Area Task average speed achievable around target points remaining in minimum AAT time */
     e_LD, /* Instantaneous lift/drag ratio, given by the indicated airspeed divided by the total energy vertical speed, when connected to an intelligent variometer. Negative values indicate climbing cruise. If the total energy vario speed is close to zero, the displayed value is '---' */
-    e_Speed, /* True Airspeed reported by a supported external intelligent vario */
+    e_Speed, /* True Airspeed reported by a supported external intelligent vario. The value is blue when estimated from ground speed and wind */
     e_Team_Code, /* The current Team code for this aircraft. Use this to report to other team members. The last team aircraft code entered is displayed underneath */
     e_Team_Bearing, /* The bearing to the team aircraft location at the last team code report */
     e_Team_BearingDiff, /* The relative bearing to the team aircraft location at the last reported team code */
@@ -156,7 +156,7 @@ namespace InfoBoxFactory
     e_ActiveWaypoint, /* Active waypoint infobox: shows the current task's next waypoint name (or Goto waypoint if no task), arrival altitude diff, and distance */
     e_PreviousWaypoint, /* Previous waypoint infobox: shows the task waypoint before the active leg (start when on the first leg) with arrival altitude diff and distance; selection is informational only and never advances the task or sets a Goto */
     e_BloodOxygen, /* Blood oxygen saturation (SpO2) from a BLE pulse oximeter */
-    e_Ballast, /* Water ballast on board; the comment shows the wing loading; tap to open the flight setup */
+    e_Ballast, /* Ballast; comment is wing loading, red over MTOW */
     e_WP_VMG, /* Speed VMG: the component of ground speed made good towards the next waypoint */
     e_CustomText, /* Shows the free text configured for this slot instead of a value */
     e_NUM_TYPES /* Last item */

@@ -13,6 +13,7 @@
 #include "Blackboard/DeviceBlackboard.hpp"
 #include "CalculationThread.hpp"
 #include "Task/ProtectedTaskManager.hpp"
+#include "Task/TaskBehaviour.hpp"
 #include "Profile/Profile.hpp"
 #include "UIState.hpp"
 #include "Operation/MessageOperationEnvironment.hpp"
@@ -23,8 +24,10 @@
 #include "PageSettings.hpp"
 #include "Weather/Features.hpp"
 #include "DataComponents.hpp"
+#include "Observation/Publish.hpp"
 #include "LogFile.hpp"
 #include "Terrain/RasterTerrain.hpp"
+#include "Session/SessionState.hpp"
 
 using namespace CommonInterface;
 
@@ -35,6 +38,15 @@ SendGetComputerSettings() noexcept;
 
 static void
 UpdateMapScalePageInfo(UIState &state) noexcept;
+
+static void
+NoteSessionPolar() noexcept
+{
+  const auto &polar = GetComputerSettings().polar;
+  Session::NotePolar(polar.glide_polar_task.GetBallastLitres(),
+                     polar.glide_polar_task.GetCrewMass(),
+                     polar.bugs);
+}
 
 void
 XCSoarInterface::ReceiveGPS() noexcept
@@ -67,6 +79,9 @@ XCSoarInterface::ReceiveCalculated() noexcept
     ReadBlackboardCalculated(device_blackboard.Calculated());
     device_blackboard.ReadComputerSettings(GetComputerSettings());
   }
+
+  if (data_components != nullptr && data_components->observations != nullptr)
+    PublishOwnObservations(*data_components->observations, Calculated());
 
   BroadcastCalculatedUpdate();
 }
@@ -116,6 +131,8 @@ ActionInterface::SetBallastLitres(double ballast_litres, bool to_devices) noexce
                                               env);
     }
   }
+
+  NoteSessionPolar();
 }
 
 void
@@ -136,6 +153,21 @@ ActionInterface::SetBallastFraction(double fraction, bool to_devices) noexcept
                                               env);
     }
   }
+
+  NoteSessionPolar();
+}
+
+bool
+ActionInterface::SetBallastDump(bool active) noexcept
+{
+  ComputerSettings &settings = SetComputerSettings();
+
+  if (active && (!settings.polar.glide_polar_task.HasBallast() ||
+                 settings.plane.dump_time == 0))
+    active = false;
+
+  settings.polar.ballast_timer_active = active;
+  return active;
 }
 
 void
@@ -150,6 +182,8 @@ ActionInterface::SetBugs(double bugs, bool to_devices) noexcept
     MessageOperationEnvironment env;
     backend_components->devices->PutBugs(bugs, env);
   }
+
+  NoteSessionPolar();
 }
 
 void
@@ -164,13 +198,27 @@ ActionInterface::SetCrewMass(double crew_mass, bool to_devices) noexcept
   if (to_devices && backend_components && backend_components->devices) {
     MessageOperationEnvironment env;
     backend_components->devices->PutCrewMass(crew_mass, env);
+    /* The vario stores ballast as total mass over the reference
+       mass.  A new crew weight changes that factor even when the
+       water is unchanged, so send the factor again or the vario's
+       litres drift by the crew change and the next LXWP2 copies
+       the drift back here. */
+    if (polar.GetReferenceMass() > 0)
+      backend_components->devices->PutBallast(polar.GetBallastFraction(),
+                                              polar.GetBallastOverload(),
+                                              env);
   }
+
+  NoteSessionPolar();
 }
 
 void
 ActionInterface::SetEmptyMass(double empty_mass, bool to_devices) noexcept
 {
   GlidePolar &polar = SetComputerSettings().polar.glide_polar_task;
+  const double previous_empty = polar.GetEmptyMass();
+  const bool empty_changed = previous_empty > empty_mass + 0.1 ||
+                             previous_empty < empty_mass - 0.1;
   polar.SetEmptyMass(empty_mass);
 
   if (backend_components)
@@ -179,7 +227,28 @@ ActionInterface::SetEmptyMass(double empty_mass, bool to_devices) noexcept
   if (to_devices && backend_components && backend_components->devices) {
     MessageOperationEnvironment env;
     backend_components->devices->PutEmptyMass(empty_mass, env);
+    /* Overload is total mass over the reference mass.  Resend ballast
+       only when the empty mass changed.  A save that leaves it alone
+       must not push ballast. */
+    if (empty_changed && polar.GetReferenceMass() > 0)
+      backend_components->devices->PutBallast(polar.GetBallastFraction(),
+                                              polar.GetBallastOverload(),
+                                              env);
   }
+}
+
+void
+ActionInterface::SetMaxTakeoffMass(double max_takeoff_mass,
+                                  bool to_devices) noexcept
+{
+  SetComputerSettings().plane.max_takeoff_mass = max_takeoff_mass;
+
+  if (!(to_devices && max_takeoff_mass > 0 &&
+        backend_components && backend_components->devices))
+    return;
+
+  MessageOperationEnvironment env;
+  backend_components->devices->PutMaxTakeoffMass(max_takeoff_mass, env);
 }
 
 void
@@ -232,11 +301,67 @@ ActionInterface::OffsetManualMacCready(double offset, bool to_devices) noexcept
   auto mc = old_mc + offset;
   if (mc < 0)
     mc = 0;
-  else if (mc > 5)
-    mc = 5;
+  else if (mc > TaskBehaviour::TASK_MC_MAX)
+    mc = TaskBehaviour::TASK_MC_MAX;
 
   if (mc != old_mc)
     SetManualMacCready(mc, to_devices);
+}
+
+static void
+PutMacCreadyToDevices(double mc) noexcept
+{
+  if (!backend_components || !backend_components->devices)
+    return;
+
+  MessageOperationEnvironment env;
+  backend_components->devices->PutMacCready(mc, env);
+}
+
+void
+ActionInterface::OffsetSafetyMacCready(double offset) noexcept
+{
+  auto &settings = SetComputerSettings();
+  const double task_mc = settings.polar.glide_polar_task.GetMC();
+  const double old_safety = settings.task.safety_mc;
+
+  auto mc = old_safety + offset;
+  if (mc < 0)
+    mc = 0;
+  else if (mc > TaskBehaviour::SAFETY_MC_MAX)
+    mc = TaskBehaviour::SAFETY_MC_MAX;
+
+  if (mc == old_safety)
+    return;
+
+  settings.task.safety_mc = mc;
+
+  if (backend_components && backend_components->calculation_thread)
+    backend_components->calculation_thread->ForceTrigger();
+
+  InfoBoxManager::SetDirty();
+
+  /* Task MC above Safety MC is the faster command. Send the lower
+     Safety MC. Once Safety MC is no longer below Task MC, put Task
+     MC back. */
+  const bool limits = task_mc > mc;
+  const bool was_limiting = task_mc > old_safety;
+  if (limits)
+    PutMacCreadyToDevices(mc);
+  else if (was_limiting)
+    PutMacCreadyToDevices(task_mc);
+}
+
+void
+ActionInterface::PublishAbortDeviceMacCready(bool in_abort) noexcept
+{
+  const auto &settings = GetComputerSettings();
+  const double task_mc = settings.polar.glide_polar_task.GetMC();
+  const double safety_mc = settings.task.safety_mc;
+  if (!(task_mc > safety_mc))
+    return;
+
+  PutMacCreadyToDevices(in_abort ? safety_mc : task_mc);
 }
 
 void

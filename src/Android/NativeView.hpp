@@ -12,6 +12,7 @@
 #endif
 
 #include <cassert>
+#include <span>
 
 class Path;
 namespace UI { class TopWindow; }
@@ -33,6 +34,7 @@ class NativeView {
   static jmethodID loadFileBitmap_method;
   static jmethodID bitmapToTexture_method;
   static jmethodID shareText_method;
+  static jmethodID shareFiles_method;
   static jmethodID openURL_method;
   static jmethodID openWifiSettings_method;
   static jmethodID openWaypointFile_method;
@@ -44,6 +46,7 @@ class NativeView {
   static jmethodID startMyService_method;
   static jmethodID launchSAFTreePicker_method;
   static jmethodID reportSize_method;
+  static jmethodID scanQRCode_method;
 
   static Java::TrivialClass clsBitmap;
   static jmethodID createBitmap_method;
@@ -75,7 +78,8 @@ public:
   static void Deinitialise(JNIEnv *env);
 
   NativeView(JNIEnv *_env, jobject _obj, unsigned _width, unsigned _height,
-             unsigned _xdpi, unsigned _ydpi,
+             unsigned _display_width, unsigned _display_height,
+             unsigned _xdpi, unsigned _ydpi, unsigned _density_dpi,
              jstring _product) noexcept;
 
   void SetPointer(JNIEnv *env, UI::TopWindow *w) noexcept {
@@ -187,6 +191,13 @@ public:
   void ShareText(JNIEnv *env, const char *text) noexcept;
 
   /**
+   * Share local data-directory files via the Android share sheet.
+   * Each path must be absolute under #GetPrimaryDataPath().
+   */
+  void ShareFiles(JNIEnv *env,
+                  std::span<const Path> absolute_paths) noexcept;
+
+  /**
    * Open a URL in the default browser.
    */
   bool OpenURL(JNIEnv *env, const char *url) noexcept;
@@ -224,4 +235,12 @@ public:
    * Launch the SAF document-tree picker for a given volume UUID.
    */
   void LaunchSAFTreePicker(JNIEnv *env, const char *volume_uuid) const noexcept;
+
+  /**
+   * Open the camera to scan a task QR code.  The scanner Activity
+   * delivers its result on its own, via ReceiveTaskQRCode().
+   */
+  void ScanQRCode(JNIEnv *env) const noexcept {
+    env->CallVoidMethod(obj, scanQRCode_method);
+  }
 };
